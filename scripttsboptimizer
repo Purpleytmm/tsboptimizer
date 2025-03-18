@@ -1,0 +1,33 @@
+local debrisToRemove = {} -- Tabela para armazenar debris removidos
+
+local function isOnGround(obj)
+    local ray = Ray.new(obj.Position, Vector3.new(0, -5, 0)) -- Verifica se há algo abaixo
+    local hit = workspace:FindPartOnRay(ray)
+    return hit ~= nil
+end
+
+while true do
+    for _, obj in pairs(workspace:GetDescendants()) do
+        if obj:IsA("Part") then
+            local parentName = obj.Parent and obj.Parent.Name:lower() or ""
+
+            -- Remove debris de "Incinerar", "Incinerate" e "Tableflip"
+            if parentName:find("incinerar") or parentName:find("incinerate") or parentName:find("tableflip") then
+                obj:Destroy()
+
+            -- Verifica debris sem hitbox (CanCollide = false)
+            elseif not obj.CanCollide and not isOnGround(obj) then
+                debrisToRemove[obj] = true
+                obj:Destroy()
+
+            -- Mantém debris no chão
+            elseif isOnGround(obj) then
+                debrisToRemove[obj] = nil -- Garante que não seja removido no futuro
+            end
+
+            -- Força todos os materiais para "Plastic", exceto jogadores
+            if not obj:IsDescendantOf(game.Players) then
+                obj.Material = Enum.Material.Plastic
+            end
+
+ 
