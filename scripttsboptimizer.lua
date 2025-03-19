@@ -1,7 +1,7 @@
 -- Script ULTRA-LEVE para JJSploit - otimizado para minimizar queda de FPS
 -- Remove efeitos sem impactar o desempenho
 
-local maxPerFrame = 10 -- Número máximo de objetos processados por frame
+local maxPerFrame = 50 -- Número máximo de objetos processados por frame
 local updateDelay = 0,5 -- Intervalo entre verificações (segundos)
 
 -- Lista de nomes exatos para procurar (muito específica para reduzir verificações)
