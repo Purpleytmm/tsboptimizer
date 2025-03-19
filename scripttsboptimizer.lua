@@ -1,5 +1,5 @@
 -- Configurações
-local CLEAN_INTERVAL = 2 -- Limpeza a cada 2 segundos
+local CLEAN_INTERVAL = 1 -- Limpeza a cada 2 segundos
 local PARTS_PER_FRAME = 20 -- 10 partes/frame (rápido e eficiente)
 local FREE_CAM_KEY = Enum.KeyCode.P -- Tecla do Freecam: Shift + P
 
