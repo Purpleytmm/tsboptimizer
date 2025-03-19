@@ -1,33 +1,44 @@
-local CLEAN_INTERVAL = 5 -- Segundos entre limpezas
+local CLEAN_INTERVAL = 10 -- Intervalo grande para reduzir lag
+local MAX_PER_FRAME = 3 -- Máximo de partes processadas por frame
 
-local function isPlayerPart(obj)
+local queue = {}
+
+-- Verifica se é parte de jogador ou árvore
+local function isProtected(obj)
     local model = obj:FindFirstAncestorOfClass("Model")
-    return model and model:FindFirstChild("Humanoid")
+    return (model and (model:FindFirstChild("Humanoid") or model.Name:lower():find("tree")))
 end
 
-local function isTree(obj)
-    local model = obj:FindFirstAncestorOfClass("Model")
-    return model and model.Name:lower():find("tree")
+-- Remove SPECIFICAMENTE os efeitos que você quer
+local function isUnwantedEffect(obj)
+    local name = obj.Name:lower()
+    return name:find("flowingwater") or name:find("flowingwatergfx") or name:find("tableflip")
 end
 
-local function isFlowingWaterEffect(obj)
-    return obj.Name:lower():find("afterimage") or obj.Name:lower():find("flowing")
-end
-
-local function cleanDebris()
+-- Limpeza otimizada por fila
+local function clean()
     for _, obj in pairs(workspace:GetDescendants()) do
-        if obj:IsA("BasePart") then
-            -- Remove after images do Flowing Water
-            if isFlowingWaterEffect(obj) then
-                pcall(obj.Destroy, obj)
-            -- Remove debris comum (não remove jogadores/árvores)
-            elseif not obj.Anchored and not obj.CanCollide and not isPlayerPart(obj) and not isTree(obj) then
-                pcall(obj.Destroy, obj)
+        if obj:IsA("BasePart") and not obj.Anchored and not obj.CanCollide then
+            if isUnwantedEffect(obj) or (not isProtected(obj)) then
+                table.insert(queue, obj)
             end
         end
     end
 end
 
+-- Processamento suave (evita lag)
+task.spawn(function()
+    while task.wait() do
+        for i = 1, MAX_PER_FRAME do
+            if #queue > 0 then
+                pcall(queue[1].Destroy, queue[1])
+                table.remove(queue, 1)
+            end
+        end
+    end
+end)
+
+-- Loop principal
 while task.wait(CLEAN_INTERVAL) do
-    cleanDebris()
+    clean()
 end
