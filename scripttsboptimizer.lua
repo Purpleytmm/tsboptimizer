@@ -9,18 +9,28 @@ end
 while wait(0.5) do
     for _, obj in pairs(workspace:GetDescendants()) do
         if obj:IsA("Part") then
-            local parentName = ""
-            if obj.Parent and obj.Parent.Name then
-                parentName = obj.Parent.Name:lower()
-            end
-
-            -- Remove partes com pais indicando golpes específicos
-            if parentName:find("incinerar") or parentName:find("incinerate") or parentName:find("tableflip") then
-                pcall(function() obj:Destroy() end)
+            -- Ignora partes que são dos jogadores
+            if obj:IsDescendantOf(game.Players) then
+                -- não faz nada se for parte de um jogador
             else
-                -- Se o objeto não tiver hitbox e não estiver no chão, remove-o
-                if not obj.CanCollide and not isOnGround(obj) then
-                    pcall(function() obj:Destroy() end)
+                local parentName = ""
+                if obj.Parent and obj.Parent.Name then
+                    parentName = obj.Parent.Name:lower()
+                end
+
+                -- Ignora partes que pertencem a árvores (supondo que "tree" conste no nome)
+                if parentName:find("tree") then
+                    -- não faz nada para partes de árvores
+                else
+                    -- Remove partes com pais indicando golpes específicos
+                    if parentName:find("incinerar") or parentName:find("incinerate") or parentName:find("tableflip") then
+                        pcall(function() obj:Destroy() end)
+                    else
+                        -- Se o objeto não tiver hitbox e não estiver no chão, remove-o
+                        if not obj.CanCollide and not isOnGround(obj) then
+                            pcall(function() obj:Destroy() end)
+                        end
+                    end
                 end
             end
 
@@ -29,21 +39,15 @@ while wait(0.5) do
             if obj.Parent and obj.Parent.Name then
                 parentName = obj.Parent.Name:lower()
             end
-
-            -- Remove efeitos de flashes brancos (Omni Directional Punch)
-            if parentName:find("omni") or parentName:find("punch") then
-                pcall(function() obj:Destroy() end)
-            -- Remove efeitos azuis (Flowing Water do Garou)
-            elseif parentName:find("flowing") or parentName:find("water") then
+            -- Remove partículas e trails relacionados aos efeitos indesejados
+            if parentName:find("omni") or parentName:find("punch") or parentName:find("flowing") or parentName:find("water") then
                 pcall(function() obj:Destroy() end)
             end
 
         elseif obj:IsA("Sound") then
-            -- Desativa sons desnecessários para reduzir carga
             pcall(function() obj.Volume = 0 end)
 
         elseif obj:IsA("PointLight") or obj:IsA("SpotLight") or obj:IsA("SurfaceLight") then
-            -- Diminui o brilho das luzes para otimizar a performance
             pcall(function() obj.Brightness = obj.Brightness * 0.5 end)
         end
     end
