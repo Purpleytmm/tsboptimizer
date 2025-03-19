@@ -1,6 +1,6 @@
 -- Configurações
-local CLEAN_INTERVAL = 5 -- Tempo entre limpezas
-local PARTS_PER_FRAME = 10 -- 10 partes/frame (rápido e eficiente)
+local CLEAN_INTERVAL = 2 -- Limpeza a cada 2 segundos
+local PARTS_PER_FRAME = 20 -- 10 partes/frame (rápido e eficiente)
 local FREE_CAM_KEY = Enum.KeyCode.P -- Tecla do Freecam: Shift + P
 
 -- Lista de Acessórios Protegidos (atualize com os nomes do seu jogo!)
@@ -68,8 +68,8 @@ end)
 local queue = {}
 workspace.DescendantAdded:Connect(function(obj)
     if obj:IsA("BasePart") and not obj.Anchored and not obj.CanCollide and not isProtected(obj) then
-        -- Remove Debris do Tableflip e Efeitos do Flowing Water
-        if obj.Name:lower():find("flowingwater") or obj.Name:lower():find("tableflip") then
+        -- Remove Efeitos do Flowing Water
+        if obj.Name:lower():find("flowingwater") then
             obj:Destroy()
         else
             table.insert(queue, obj)
@@ -82,7 +82,9 @@ task.spawn(function()
     while task.wait(0.1) do
         for i = 1, math.min(PARTS_PER_FRAME, #queue) do
             if queue[1] then
-                pcall(queue[1].Destroy, queue[1])
+                pcall(function()
+                    queue[1]:Destroy() -- Usa Destroy diretamente
+                end)
                 table.remove(queue, 1)
             end
         end
@@ -94,11 +96,25 @@ end)
 --]]
 for _, obj in pairs(workspace:GetDescendants()) do
     if obj:IsA("BasePart") and not obj.Anchored and not obj.CanCollide and not isProtected(obj) then
-        -- Remove Debris do Tableflip e Efeitos do Flowing Water
-        if obj.Name:lower():find("flowingwater") or obj.Name:lower():find("tableflip") then
+        -- Remove Efeitos do Flowing Water
+        if obj.Name:lower():find("flowingwater") then
             obj:Destroy()
         else
             obj:Destroy()
+        end
+    end
+end
+
+-- Loop de limpeza a cada 2 segundos
+while task.wait(CLEAN_INTERVAL) do
+    for _, obj in pairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") and not obj.Anchored and not obj.CanCollide and not isProtected(obj) then
+            -- Remove Efeitos do Flowing Water
+            if obj.Name:lower():find("flowingwater") then
+                obj:Destroy()
+            else
+                obj:Destroy()
+            end
         end
     end
 end
