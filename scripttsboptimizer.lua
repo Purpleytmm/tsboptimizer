@@ -1,25 +1,25 @@
 -- Configurações
 local CLEAN_INTERVAL = 5 -- Tempo entre limpezas
-local PARTS_PER_FRAME = 5 -- Partes processadas por frame
+local PARTS_PER_FRAME = 10 -- 10 partes/frame (rápido e eficiente)
 local FREE_CAM_KEY = Enum.KeyCode.P -- Tecla do Freecam: Shift + P
 
--- Lista de Cosméticos Protegidos (atualize com os nomes do seu jogo!)
-local PROTECTED_COSMETICS = {
+-- Lista de Acessórios Protegidos (atualize com os nomes do seu jogo!)
+local PROTECTED_ACCESSORIES = {
     "Worn Cape", "Mahoraga Well", "Cloak", "Aura", "Effect",
     "Accessory", "Hat", "Wings", "Skin", "Cosmetic", "Cape"
 }
 
 --[[ 
-    VERIFICA SE O OBJETO É PROTEGIDO (Players/Dummies/Árvores/Cosméticos)
+    VERIFICA SE O OBJETO É PROTEGIDO (Players/Dummies/Árvores/Acessórios)
 --]]
 local function isProtected(obj)
     -- Verifica se é parte de um Player
     local player = game.Players:GetPlayerFromCharacter(obj.Parent)
     if player then return true end
 
-    -- Verifica se é um Cosmético
+    -- Verifica se é um Acessório
     local name = obj.Name:lower()
-    for _, keyword in pairs(PROTECTED_COSMETICS) do
+    for _, keyword in pairs(PROTECTED_ACCESSORIES) do
         if name:find(keyword:lower()) then
             return true
         end
@@ -68,11 +68,16 @@ end)
 local queue = {}
 workspace.DescendantAdded:Connect(function(obj)
     if obj:IsA("BasePart") and not obj.Anchored and not obj.CanCollide and not isProtected(obj) then
-        table.insert(queue, obj)
+        -- Remove Efeitos do Flowing Water (após verificação)
+        if obj.Name:lower():find("flowingwater") then
+            obj:Destroy()
+        else
+            table.insert(queue, obj)
+        end
     end
 end)
 
--- Processamento leve (5 partes/frame)
+-- Processamento leve (10 partes/frame)
 task.spawn(function()
     while task.wait(0.1) do
         for i = 1, math.min(PARTS_PER_FRAME, #queue) do
@@ -89,6 +94,11 @@ end)
 --]]
 for _, obj in pairs(workspace:GetDescendants()) do
     if obj:IsA("BasePart") and not obj.Anchored and not obj.CanCollide and not isProtected(obj) then
-        obj:Destroy()
+        -- Remove Efeitos do Flowing Water (após verificação)
+        if obj.Name:lower():find("flowingwater") then
+            obj:Destroy()
+        else
+            obj:Destroy()
+        end
     end
 end
