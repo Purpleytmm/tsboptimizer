@@ -1,87 +1,59 @@
--- Script otimizado para JJSploit - Remove TODOS os efeitos mencionados
--- Versão ultra-leve e eficiente que foca em todas as partes
+-- Script ULTRA-LEVE para JJSploit - otimizado para minimizar queda de FPS
+-- Remove efeitos sem impactar o desempenho
 
-local checkDelay = 0.3 -- Intervalo entre verificações para economizar recursos
+local maxPerFrame = 10 -- Número máximo de objetos processados por frame
+local updateDelay = 0,5 -- Intervalo entre verificações (segundos)
 
--- Tabelas de termos para correspondência
-local targetEffects = {
-    -- Formato: {nomes do movimento, nomes do efeito}
-    tableflipDebris = {{"tableflip", "table"}, {"debris", "chunk", "rubble", "part", "parts"}},
-    incinerateDebris = {{"incinerate", "incin"}, {"debris", "chunk"}},
-    omniLines = {{"omni", "directional", "punch", "odp"}, {"line", "white", "beam", "trail"}},
-    garouWater = {{"garou"}, {"water", "flow", "after", "image", "effect", "flowingwater"}}
+-- Lista de nomes exatos para procurar (muito específica para reduzir verificações)
+local exactMatches = {
+    "Debris", "debris", "Rubble", "rubble", "Chunk", "chunk",   -- TableFlip/Incinerate
+    "WhiteLine", "whiteline", "Line", "line", "Beam", "beam",   -- Omni Punch
+    "WaterEffect", "watereffect", "Flow", "flow", "AfterImage"  -- Garou
 }
 
--- Função que verifica se um texto contém qualquer termo de uma lista
-local function hasAnyTerm(text, terms)
-    if not text then return false end
-    text = text:lower()
-    for _, term in pairs(terms) do
-        if text:find(term) then
-            return true
-        end
-    end
-    return false
-end
-
--- Função principal extremamente simplificada
-local function cleanAllEffects()
-    for _, obj in pairs(workspace:GetDescendants()) do
-        -- Verifica apenas objetos que podem ser efeitos visuais
-        if obj:IsA("BasePart") or obj:IsA("Beam") or obj:IsA("Trail") or obj:IsA("ParticleEmitter") then
-            pcall(function()
-                local objName = obj.Name:lower()
-                
-                -- Encontra 2 níveis de pais para verificar contexto
-                local parent = obj.Parent
-                local parentName = parent and parent.Name:lower() or ""
-                local grandParent = parent and parent.Parent
-                local grandParentName = grandParent and grandParent.Name:lower() or ""
-                
-                -- 1. Remover debris do TableFlip
-                if hasAnyTerm(objName, targetEffects.tableflipDebris[2]) and 
-                   (hasAnyTerm(parentName, targetEffects.tableflipDebris[1]) or 
-                    hasAnyTerm(grandParentName, targetEffects.tableflipDebris[1])) then
-                    
-                    -- Verifica se está no ar (Y > 1)
-                    if not obj:IsA("BasePart") or obj.Position.Y > 1 then
-                        obj:Destroy()
+-- Função que processa apenas alguns objetos por vez
+local index = 1
+local function processNextBatch()
+    local count = 0
+    local children = workspace:GetChildren()
+    local size = #children
+    
+    -- Processa apenas alguns objetos por vez, continuando de onde parou
+    while count < maxPerFrame and count < size do
+        if index > size then index = 1 end
+        local obj = children[index]
+        
+        pcall(function()
+            -- Verifica somente pelo nome do objeto (verificação ultra-simplificada)
+            local name = obj.Name
+            for _, match in pairs(exactMatches) do
+                if name == match then
+                    if obj:IsA("BasePart") then
+                        -- Para debris, verifica se está no ar (simplificado)
+                        if name:find("ebris") or name:find("ubble") or name:find("hunk") then
+                            if obj.Position.Y > 1 then
+                                obj:Destroy()
+                            end
+                        else
+                            -- Para outros efeitos, remove diretamente
+                            obj:Destroy()
+                        end
                     end
+                    break
                 end
-                
-                -- 2. Remover debris do Incinerate
-                if hasAnyTerm(objName, targetEffects.incinerateDebris[2]) and 
-                   (hasAnyTerm(parentName, targetEffects.incinerateDebris[1]) or 
-                    hasAnyTerm(grandParentName, targetEffects.incinerateDebris[1])) then
-                    
-                    -- Verifica se está no ar (Y > 1)
-                    if not obj:IsA("BasePart") or obj.Position.Y > 1 then
-                        obj:Destroy()
-                    end
-                end
-                
-                -- 3. Remover linhas brancas do Omni Directional Punch
-                if hasAnyTerm(objName, targetEffects.omniLines[2]) and 
-                   (hasAnyTerm(parentName, targetEffects.omniLines[1]) or 
-                    hasAnyTerm(grandParentName, targetEffects.omniLines[1])) then
-                    
-                    obj:Destroy()
-                end
-                
-                -- 4. Remover efeitos de água do Garou
-                if hasAnyTerm(objName, targetEffects.garouWater[2]) and 
-                   (hasAnyTerm(parentName, targetEffects.garouWater[1]) or 
-                    hasAnyTerm(grandParentName, targetEffects.garouWater[1])) then
-                    
-                    obj:Destroy()
-                end
-            end)
-        end
+            end
+        end)
+        
+        index = index + 1
+        count = count + 1
     end
 end
 
--- Executa o limpador em intervalos regulares em vez de a cada frame
-while true do
-    pcall(cleanAllEffects)
-    wait(checkDelay)
-end
+-- Inicia o ciclo de processamento com delay entre execuções
+spawn(function()
+    while wait(updateDelay) do
+        pcall(processNextBatch)
+    end
+end)
+
+print("✓ Script anti-lag ULTRA-LEVE iniciado")
