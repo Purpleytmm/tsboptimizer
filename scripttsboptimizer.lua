@@ -1,48 +1,33 @@
-local CLEAN_INTERVAL = 5 -- Intervalo aumentado para reduzir CPU
-local PARTS_PER_FRAME = 2 -- Reduzido para processamento mínimo
+local CLEAN_INTERVAL = 5 -- Segundos entre limpezas
 
-local debrisQueue = {}
-
--- Verificação otimizada de ancestry (sem funções extras)
-local function shouldKeep(obj)
-    -- Verifica Flowing Water primeiro (prioridade máxima)
-    if obj.Name:lower():find("flowing") or obj.Name:lower():find("afterimage") then
-        return true
-    end
-    
-    -- Verificação combinada de player + árvore
+local function isPlayerPart(obj)
     local model = obj:FindFirstAncestorOfClass("Model")
-    if model then
-        return model:FindFirstChild("Humanoid") or model.Name:lower():find("tree")
-    end
-    
-    return false
+    return model and model:FindFirstChild("Humanoid")
 end
 
--- Limpeza ultra-otimizada
+local function isTree(obj)
+    local model = obj:FindFirstAncestorOfClass("Model")
+    return model and model.Name:lower():find("tree")
+end
+
+local function isFlowingWaterEffect(obj)
+    return obj.Name:lower():find("afterimage") or obj.Name:lower():find("flowing")
+end
+
 local function cleanDebris()
     for _, obj in pairs(workspace:GetDescendants()) do
-        if obj:IsA("BasePart") and not obj.Anchored and not obj.CanCollide then
-            if not shouldKeep(obj) then
-                table.insert(debrisQueue, obj)
+        if obj:IsA("BasePart") then
+            -- Remove after images do Flowing Water
+            if isFlowingWaterEffect(obj) then
+                pcall(obj.Destroy, obj)
+            -- Remove debris comum (não remove jogadores/árvores)
+            elseif not obj.Anchored and not obj.CanCollide and not isPlayerPart(obj) and not isTree(obj) then
+                pcall(obj.Destroy, obj)
             end
         end
     end
 end
 
--- Processamento mega leve (1 parte/frame)
-task.spawn(function()
-    while task.wait(0.5) do -- Adicionado delay extra
-        for i = 1, math.min(PARTS_PER_FRAME, #debrisQueue) do
-            pcall(function()
-                debrisQueue[1]:Destroy()
-            end)
-            table.remove(debrisQueue, 1)
-        end
-    end
-end)
-
--- Loop principal super espaçado
 while task.wait(CLEAN_INTERVAL) do
     cleanDebris()
 end
