@@ -1,6 +1,6 @@
 -- Configurações
-local CLEAN_INTERVAL = 1 -- Limpeza a cada 2 segundos
-local PARTS_PER_FRAME = 2000 -- 10 partes/frame (rápido e eficiente)
+local CLEAN_INTERVAL = 2 -- Limpeza a cada 2 segundos
+local PARTS_PER_FRAME = 50 -- 50 partes/frame (rápido e eficiente)
 local FREE_CAM_KEY = Enum.KeyCode.P -- Tecla do Freecam: Shift + P
 
 -- Lista de Acessórios Protegidos (atualize com os nomes do seu jogo!)
@@ -68,18 +68,13 @@ end)
 local queue = {}
 workspace.DescendantAdded:Connect(function(obj)
     if obj:IsA("BasePart") and not obj.Anchored and not obj.CanCollide and not isProtected(obj) then
-        -- Remove Efeitos do Flowing Water
-        if obj.Name:lower():find("flowingwater") then
-            obj:Destroy()
-        else
-            table.insert(queue, obj)
-        end
+        table.insert(queue, obj)
     end
 end)
 
--- Processamento leve (10 partes/frame)
+-- Processamento leve (50 partes/frame)
 task.spawn(function()
-    while task.wait(0.1) do
+    while task.wait(0.05) do -- Intervalo reduzido para 0.05s
         for i = 1, math.min(PARTS_PER_FRAME, #queue) do
             if queue[1] then
                 pcall(function()
@@ -96,12 +91,7 @@ end)
 --]]
 for _, obj in pairs(workspace:GetDescendants()) do
     if obj:IsA("BasePart") and not obj.Anchored and not obj.CanCollide and not isProtected(obj) then
-        -- Remove Efeitos do Flowing Water
-        if obj.Name:lower():find("flowingwater") then
-            obj:Destroy()
-        else
-            obj:Destroy()
-        end
+        obj:Destroy()
     end
 end
 
@@ -109,12 +99,7 @@ end
 while task.wait(CLEAN_INTERVAL) do
     for _, obj in pairs(workspace:GetDescendants()) do
         if obj:IsA("BasePart") and not obj.Anchored and not obj.CanCollide and not isProtected(obj) then
-            -- Remove Efeitos do Flowing Water
-            if obj.Name:lower():find("flowingwater") then
-                obj:Destroy()
-            else
-                obj:Destroy()
-            end
+            obj:Destroy()
         end
     end
 end
