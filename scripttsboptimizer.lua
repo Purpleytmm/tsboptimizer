@@ -1,6 +1,5 @@
 local debrisToRemove = {} -- Tabela para armazenar debris removidos
 
--- Função para verificar se o objeto está no chão
 local function isOnGround(obj)
     local origin = obj.Position
     local direction = Vector3.new(0, -5, 0)
@@ -31,12 +30,9 @@ while wait(0.5) do
                 end
             end
 
-            -- Força material para Plastic, exceto se fizer parte de um jogador
-            if not obj:IsDescendantOf(game.Players) then
-                pcall(function() obj.Material = Enum.Material.Plastic end)
-            end
+            -- Removido: Força dos materiais para Plastic
 
-            -- (Opcional) Desativa sombras para aliviar a carga da GPU
+            -- Desativa sombras para aliviar a carga da GPU
             pcall(function() obj.CastShadow = false end)
 
         elseif obj:IsA("ParticleEmitter") or obj:IsA("Trail") then
@@ -54,13 +50,12 @@ while wait(0.5) do
             end
 
         elseif obj:IsA("Sound") then
-            -- (Opcional) Desativa sons desnecessários para reduzir carga
+            -- Desativa sons desnecessários para reduzir carga
             pcall(function() obj.Volume = 0 end)
 
         elseif obj:IsA("PointLight") or obj:IsA("SpotLight") or obj:IsA("SurfaceLight") then
-            -- (Opcional) Diminui o brilho das luzes para otimizar a performance
+            -- Diminui o brilho das luzes para otimizar a performance
             pcall(function() obj.Brightness = obj.Brightness * 0.5 end)
         end
     end
 end
-
