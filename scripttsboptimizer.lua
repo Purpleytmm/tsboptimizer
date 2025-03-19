@@ -11,9 +11,9 @@ local function removeLag()
     lastCheck = currentTime
     
     -- Nomes a serem verificados (em minúsculo)
-    local debrisNames = {"debris", "chunk", "rubble"}
+    local debrisNames = {"debris", "chunk", "rubble", "part"}
     local moveNames = {"tableflip", "incinerate"}
-    local lineNames = {"line", "whiteline"}
+    local lineNames = {"line", "whiteline", "flashes"}
     local waterNames = {"flowingwater", "watereffect", "afterimage"}
     
     -- Encontra efeitos a serem removidos
