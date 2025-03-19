@@ -68,8 +68,8 @@ end)
 local queue = {}
 workspace.DescendantAdded:Connect(function(obj)
     if obj:IsA("BasePart") and not obj.Anchored and not obj.CanCollide and not isProtected(obj) then
-        -- Remove Efeitos do Flowing Water (após verificação)
-        if obj.Name:lower():find("flowingwater") then
+        -- Remove Debris do Tableflip e Efeitos do Flowing Water
+        if obj.Name:lower():find("flowingwater") or obj.Name:lower():find("tableflip") then
             obj:Destroy()
         else
             table.insert(queue, obj)
@@ -94,8 +94,8 @@ end)
 --]]
 for _, obj in pairs(workspace:GetDescendants()) do
     if obj:IsA("BasePart") and not obj.Anchored and not obj.CanCollide and not isProtected(obj) then
-        -- Remove Efeitos do Flowing Water (após verificação)
-        if obj.Name:lower():find("flowingwater") then
+        -- Remove Debris do Tableflip e Efeitos do Flowing Water
+        if obj.Name:lower():find("flowingwater") or obj.Name:lower():find("tableflip") then
             obj:Destroy()
         else
             obj:Destroy()
