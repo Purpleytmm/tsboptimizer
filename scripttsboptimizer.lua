@@ -1,5 +1,3 @@
-local debrisToRemove = {} -- Tabela para armazenar debris removidos
-
 local function isOnGround(obj)
     local origin = obj.Position
     local direction = Vector3.new(0, -5, 0)
@@ -22,18 +20,9 @@ while wait(0.5) do
             else
                 -- Se o objeto não tiver hitbox e não estiver no chão, remove-o
                 if not obj.CanCollide and not isOnGround(obj) then
-                    debrisToRemove[obj] = true
                     pcall(function() obj:Destroy() end)
-                -- Se estiver no chão, garante que não seja removido futuramente
-                elseif isOnGround(obj) then
-                    debrisToRemove[obj] = nil
                 end
             end
-
-            -- Removido: Força dos materiais para Plastic
-
-            -- Desativa sombras para aliviar a carga da GPU
-            pcall(function() obj.CastShadow = false end)
 
         elseif obj:IsA("ParticleEmitter") or obj:IsA("Trail") then
             local parentName = ""
