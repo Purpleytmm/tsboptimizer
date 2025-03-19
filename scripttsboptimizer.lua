@@ -1,64 +1,87 @@
--- Script otimizado para JJSploit - versão ultra-leve
--- Remove efeitos do TableFlip, Incinerate, OmniDirectionalPunch e Garou
+-- Script otimizado para JJSploit - Remove TODOS os efeitos mencionados
+-- Versão ultra-leve e eficiente que foca em todas as partes
 
-local checkInterval = 0.5 -- Intervalo entre verificações (aumentado para economizar recursos)
-local lastCheck = 0
+local checkDelay = 0.3 -- Intervalo entre verificações para economizar recursos
+
+-- Tabelas de termos para correspondência
+local targetEffects = {
+    -- Formato: {nomes do movimento, nomes do efeito}
+    tableflipDebris = {{"tableflip", "table"}, {"debris", "chunk", "rubble", "part", "parts"}},
+    incinerateDebris = {{"incinerate", "incin"}, {"debris", "chunk"}},
+    omniLines = {{"omni", "directional", "punch", "odp"}, {"line", "white", "beam", "trail"}},
+    garouWater = {{"garou"}, {"water", "flow", "after", "image", "effect", "flowingwater"}}
+}
+
+-- Função que verifica se um texto contém qualquer termo de uma lista
+local function hasAnyTerm(text, terms)
+    if not text then return false end
+    text = text:lower()
+    for _, term in pairs(terms) do
+        if text:find(term) then
+            return true
+        end
+    end
+    return false
+end
 
 -- Função principal extremamente simplificada
-local function removeLag()
-    local currentTime = tick()
-    if currentTime - lastCheck < checkInterval then return end
-    lastCheck = currentTime
-    
-    -- Nomes a serem verificados (em minúsculo)
-    local debrisNames = {"debris", "chunk", "rubble", "part"}
-    local moveNames = {"tableflip", "incinerate"}
-    local lineNames = {"line", "whiteline", "flashes"}
-    local waterNames = {"flowingwater", "watereffect", "afterimage"}
-    
-    -- Encontra efeitos a serem removidos
-    for _, v in pairs(workspace:GetDescendants()) do
-        -- Pula se não for uma parte
-        if not v:IsA("BasePart") then continue end
-        
-        local name = v.Name:lower()
-        local parent = v.Parent
-        local parentName = parent and parent.Name:lower() or ""
-        
-        -- Verifica e remove os efeitos
-        pcall(function()
-            -- TableFlip ou Incinerate debris - remove apenas os que não estão no chão
-            for _, debrisName in pairs(debrisNames) do
-                if name:find(debrisName) then
-                    for _, moveName in pairs(moveNames) do
-                        if parentName:find(moveName) and v.Position.Y > 1 then
-                            v:Destroy()
-                            return
-                        end
+local function cleanAllEffects()
+    for _, obj in pairs(workspace:GetDescendants()) do
+        -- Verifica apenas objetos que podem ser efeitos visuais
+        if obj:IsA("BasePart") or obj:IsA("Beam") or obj:IsA("Trail") or obj:IsA("ParticleEmitter") then
+            pcall(function()
+                local objName = obj.Name:lower()
+                
+                -- Encontra 2 níveis de pais para verificar contexto
+                local parent = obj.Parent
+                local parentName = parent and parent.Name:lower() or ""
+                local grandParent = parent and parent.Parent
+                local grandParentName = grandParent and grandParent.Name:lower() or ""
+                
+                -- 1. Remover debris do TableFlip
+                if hasAnyTerm(objName, targetEffects.tableflipDebris[2]) and 
+                   (hasAnyTerm(parentName, targetEffects.tableflipDebris[1]) or 
+                    hasAnyTerm(grandParentName, targetEffects.tableflipDebris[1])) then
+                    
+                    -- Verifica se está no ar (Y > 1)
+                    if not obj:IsA("BasePart") or obj.Position.Y > 1 then
+                        obj:Destroy()
                     end
                 end
-            end
-            
-            -- OmniDirectionalPunch linhas brancas
-            for _, lineName in pairs(lineNames) do
-                if name:find(lineName) and parentName:find("omni") then
-                    v:Destroy()
-                    return
+                
+                -- 2. Remover debris do Incinerate
+                if hasAnyTerm(objName, targetEffects.incinerateDebris[2]) and 
+                   (hasAnyTerm(parentName, targetEffects.incinerateDebris[1]) or 
+                    hasAnyTerm(grandParentName, targetEffects.incinerateDebris[1])) then
+                    
+                    -- Verifica se está no ar (Y > 1)
+                    if not obj:IsA("BasePart") or obj.Position.Y > 1 then
+                        obj:Destroy()
+                    end
                 end
-            end
-            
-            -- Garou efeitos de água
-            for _, waterName in pairs(waterNames) do
-                if name:find(waterName) and (parentName:find("garou") or parentName:find("water")) then
-                    v:Destroy()
-                    return
+                
+                -- 3. Remover linhas brancas do Omni Directional Punch
+                if hasAnyTerm(objName, targetEffects.omniLines[2]) and 
+                   (hasAnyTerm(parentName, targetEffects.omniLines[1]) or 
+                    hasAnyTerm(grandParentName, targetEffects.omniLines[1])) then
+                    
+                    obj:Destroy()
                 end
-            end
-        end)
+                
+                -- 4. Remover efeitos de água do Garou
+                if hasAnyTerm(objName, targetEffects.garouWater[2]) and 
+                   (hasAnyTerm(parentName, targetEffects.garouWater[1]) or 
+                    hasAnyTerm(grandParentName, targetEffects.garouWater[1])) then
+                    
+                    obj:Destroy()
+                end
+            end)
+        end
     end
 end
 
--- Conexão mais leve (usando stepped em vez de heartbeat)
-game:GetService("RunService").Stepped:Connect(removeLag)
-
-print("✓ Script anti-lag carregado - Versão ultra-leve para JJSploit")
+-- Executa o limpador em intervalos regulares em vez de a cada frame
+while true do
+    pcall(cleanAllEffects)
+    wait(checkDelay)
+end
