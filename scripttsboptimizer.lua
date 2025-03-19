@@ -1,43 +1,46 @@
-local CLEAN_INTERVAL = 5 -- Segundos (performance máxima)
-local queue = {}
+-- Configuração
+local CLEAN_INTERVAL = 10 -- Segundos (CPU quase zero)
+local PARTS_PER_FRAME = 3 -- 3 partes/frame (equilíbrio performance/eficiência)
 
--- Verificação RÁPIDA de proteção (players, árvores, dummy)
+-- Verificação direta de proteção
 local function isProtected(obj)
-    local model = obj:FindFirstAncestorOfClass("Model")
-    return model and (
-        model:FindFirstChild("Humanoid") or 
-        model.Name:lower():find("weakestdummy") or 
-        model.Name:lower():find("tree")
-    )
+    -- Verifica se é parte de um jogador
+    local player = game.Players:GetPlayerFromCharacter(obj.Parent)
+    if player then return true end
+
+    -- Verifica ancestrais (árvores, cutscenes, dummy)
+    local model = obj:FindFirstAncestorWhichIsA("Model")
+    if model then
+        return model:FindFirstChild("Humanoid") or 
+               model.Name:lower():find("tree") or 
+               model.Name:find("SeriousPunch") or 
+               model.Name:find("WeakestDummy")
+    end
+    
+    return false
 end
 
--- Adiciona debris à fila automaticamente
+-- Sistema de fila
+local queue = {}
 workspace.DescendantAdded:Connect(function(obj)
     if obj:IsA("BasePart") and not obj.Anchored and not obj.CanCollide and not isProtected(obj) then
         table.insert(queue, obj)
     end
 end)
 
--- Remove 5 debris/frame (zero lag)
+-- Processa 3 partes/frame
 task.spawn(function()
-    while task.wait() do
-        for i = 1, math.min(5, #queue) do
+    while task.wait(0.3) do -- Intervalo reduzido para melhor eficiência
+        for i = 1, math.min(PARTS_PER_FRAME, #queue) do
             pcall(queue[1].Destroy, queue[1])
             table.remove(queue, 1)
         end
     end
 end)
 
--- Limpeza FULL inicial + periódica (otimizada)
-local function fastClean()
-    for _, obj in pairs(workspace:GetDescendants()) do
-        if obj:IsA("BasePart") and not obj.Anchored and not obj.CanCollide and not isProtected(obj) then
-            table.insert(queue, obj)
-        end
+-- Limpeza inicial
+for _, obj in pairs(workspace:GetDescendants()) do
+    if obj:IsA("BasePart") and not obj.Anchored and not obj.CanCollide and not isProtected(obj) then
+        obj:Destroy()
     end
-end
-
-fastClean()
-while task.wait(CLEAN_INTERVAL) do
-    fastClean()
 end
