@@ -1,27 +1,44 @@
 -- Configurações
-local CLEAN_INTERVAL = 5 -- Segundos (performance)
-local PARTS_PER_FRAME = 3 -- 3 partes/frame (equilíbrio perfeito)
-local FREE_CAM_KEY = Enum.KeyCode.P -- Tecla: Shift + P
+local CLEAN_INTERVAL = 5 -- Tempo entre limpezas
+local PARTS_PER_FRAME = 5 -- Partes processadas por frame
+local FREE_CAM_KEY = Enum.KeyCode.P -- Tecla do Freecam: Shift + P
+
+-- Lista de Cosméticos Protegidos (atualize com os nomes do seu jogo!)
+local PROTECTED_COSMETICS = {
+    "Worn Cape", "Mahoraga Well", "Cloak", "Aura", "Effect",
+    "Accessory", "Hat", "Wings", "Skin", "Cosmetic", "Cape"
+}
 
 --[[ 
-    PROTEÇÃO TOTAL (Players/Dummies/Árvores)
+    VERIFICA SE O OBJETO É PROTEGIDO (Players/Dummies/Árvores/Cosméticos)
 --]]
 local function isProtected(obj)
-    -- Players
+    -- Verifica se é parte de um Player
     local player = game.Players:GetPlayerFromCharacter(obj.Parent)
     if player then return true end
 
-    -- Dummies/NPCs e Árvores
+    -- Verifica se é um Cosmético
+    local name = obj.Name:lower()
+    for _, keyword in pairs(PROTECTED_COSMETICS) do
+        if name:find(keyword:lower()) then
+            return true
+        end
+    end
+
+    -- Verifica Dummies/Árvores
     local model = obj:FindFirstAncestorOfClass("Model")
-    return model and (
-        model:FindFirstChild("Humanoid") or 
-        model.Name:lower():find("tree") or 
-        model.Name:lower():find("dummy")
-    )
+    if model then
+        local modelName = model.Name:lower()
+        return model:FindFirstChild("Humanoid") or 
+               modelName:find("tree") or 
+               modelName:find("dummy")
+    end
+    
+    return false
 end
 
 --[[ 
-    FREECAM (Shift + P) - Funciona SEMPRE
+    FREECAM (Shift + P) - Funciona durante cutscenes!
 --]]
 local camera = workspace.CurrentCamera
 local freecamActive = false
@@ -46,7 +63,7 @@ game:GetService("UserInputService").InputBegan:Connect(function(input)
 end)
 
 --[[ 
-    SISTEMA DE DEBRIS (3/frame)
+    SISTEMA DE LIMPEZA (Otimizado para Low-End)
 --]]
 local queue = {}
 workspace.DescendantAdded:Connect(function(obj)
@@ -55,9 +72,10 @@ workspace.DescendantAdded:Connect(function(obj)
     end
 end)
 
+-- Processamento leve (5 partes/frame)
 task.spawn(function()
-    while task.wait(0.15) do -- Delay mínimo para evitar lag
-        for i = 1, PARTS_PER_FRAME do
+    while task.wait(0.1) do
+        for i = 1, math.min(PARTS_PER_FRAME, #queue) do
             if queue[1] then
                 pcall(queue[1].Destroy, queue[1])
                 table.remove(queue, 1)
@@ -66,7 +84,9 @@ task.spawn(function()
     end
 end)
 
--- Limpeza INICIAL (rápida e segura)
+--[[ 
+    INICIALIZAÇÃO (Remove debris existentes)
+--]]
 for _, obj in pairs(workspace:GetDescendants()) do
     if obj:IsA("BasePart") and not obj.Anchored and not obj.CanCollide and not isProtected(obj) then
         obj:Destroy()
