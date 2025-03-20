@@ -11,6 +11,7 @@ local camera = workspace.CurrentCamera
 
 --=# Registros e Tabelas de Referência #=--
 local cutsceneRegistry = {}
+local omniPunchFirstLineFlag = false
 local bodyParts = {
     head = true, torso = true, humanoidrootpart = true,
     leftarm = true, rightarm = true, leftleg = true, rightleg = true
@@ -21,13 +22,15 @@ local allowedEmotes = {
 local effectsToRemove = {
     afterimage = true, 
     flowingwater = true, 
-    _trail = true
+    _trail = true,
+    consecutive = true,
+    machinegun = true,
+    ["machine gun"] = true
 }
 
 --=# Sistema de Limpeza #=--
 local queue = {}
 local pointer = 1
-local nextYield = 0
 
 --=# Funções Otimizadas #=--
 local function registerCutscene(cutsceneModel)
@@ -42,6 +45,29 @@ local function registerCutscene(cutsceneModel)
         }
     end
 end
+
+-- Rastreamento global estrito para linhas brancas do Omni Punch
+local whiteLinesAllowed = true
+workspace.DescendantAdded:Connect(function(obj)
+    if obj.Name:lower() == "whiteline" then
+        local model = obj:FindFirstAncestorOfClass("Model")
+        if model and model.Name:lower():find("omni") then
+            if not whiteLinesAllowed then
+                task.defer(function() -- Remover em task separada para evitar erros
+                    if obj and obj.Parent then
+                        obj:Destroy()
+                    end
+                end)
+            end
+            whiteLinesAllowed = false -- Após a primeira linha, não permite mais
+            
+            -- Reset automático após 5 segundos (duração típica de cutscene)
+            task.delay(5, function()
+                whiteLinesAllowed = true
+            end)
+        end
+    end
+end)
 
 local function isProtected(obj, lowerName, model)
     -- Verifica se o objeto pertence a um personagem
@@ -60,12 +86,38 @@ local function isProtected(obj, lowerName, model)
             return true
         end
     end
+    
+    -- Proteção específica para Foul Ball (Metal Bat/Brutal Demon)
+    local modelName = model and model.Name:lower() or ""
+    if lowerName:find("ball") or lowerName:find("foul") or
+       modelName:find("ball") or modelName:find("foul") or
+       lowerName:find("metal bat") or lowerName:find("brutal demon") or
+       modelName:find("metal bat") or modelName:find("brutal demon") then
+        return true
+    end
 
-    -- Tratamento de linhas brancas (whiteline)
+    -- Tratamento RIGOROSO de linhas brancas (whiteline)
     if lowerName == "whiteline" then
+        -- Caso seja um Omni Punch, trata com regra especial global
+        if model and model.Name:lower():find("omni") then
+            -- A lógica principal está no evento DescendantAdded
+            -- Apenas mantém a proteção para a primeira linha
+            if not omniPunchFirstLineFlag then
+                omniPunchFirstLineFlag = true
+                
+                -- Reset após tempo para permitir futuras cutscenes
+                task.delay(7,5, function() 
+                    omniPunchFirstLineFlag = false
+                end)
+                
+                return true -- Apenas a primeira linha é protegida
+            end
+            return false -- Todas as demais são removidas
+        end
+        
+        -- Para outras cutscenes não-Omni
         if model then
             registerCutscene(model)
-            local isOmni = model.Name:lower():find("omni")
             local registry = cutsceneRegistry[model]
             
             if not registry.firstLineProtected then
@@ -81,13 +133,25 @@ local function isProtected(obj, lowerName, model)
     if lowerName:find("meteor") then return true end
     if lowerName:find("frozen") and lowerName:find("soul") then return true end
 
-    -- Remover partes do Omni Directional Punch
+    -- Remover efeitos de golpes consecutivos e machine gun blows
+    if lowerName:find("consecutive") or lowerName:find("machine gun") or lowerName:find("machinegun") then
+        return false
+    end
+
+    -- Remover partes do Omni Directional Punch (exceto a primeira linha branca)
     if lowerName:find("omni") and lowerName:find("punch") then return false end
 
     -- Verificação de debris
     if lowerName:find("debris") then
+        -- Proteção para debris do Foul Ball
+        if modelName:find("metal") or modelName:find("brutal") or
+           modelName:find("foul") or modelName:find("ball") then
+            return true
+        end
+        
         -- Se o modelo for relacionado a Omni, protege
         if model and model.Name:lower():find("omni") then return true end
+        
         return false -- Remove outros debris
     end
 
@@ -96,8 +160,18 @@ local function isProtected(obj, lowerName, model)
         if lowerName:find(effect) then return false end
     end
 
-    -- Manter efeitos essenciais
-    if lowerName:find("punch") or lowerName:find("hitfx") then return true end
+    -- Remover efeitos de multi-golpes
+    if lowerName:find("punch") then
+        -- Remove gráficos de golpes consecutivos mas mantém hitfx normais
+        if lowerName:find("multi") or lowerName:find("rapid") or lowerName:find("barrage") then
+            return false
+        end
+        
+        -- Mantém efeitos de golpes principais
+        if lowerName:find("hitfx") then
+            return true
+        end
+    end
 
     -- Padrão: proteger
     return true
