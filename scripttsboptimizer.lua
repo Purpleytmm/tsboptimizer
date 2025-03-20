@@ -1,6 +1,6 @@
 -- Configurações
-local CLEAN_INTERVAL = 5 -- Tempo entre limpezas
-local PARTS_PER_FRAME = 5 -- Partes processadas por frame
+local CLEAN_INTERVAL = 1 -- Tempo entre limpezas
+local PARTS_PER_FRAME = 1000 -- Partes processadas por frame
 local FREE_CAM_KEY = Enum.KeyCode.P -- Tecla do Freecam: Shift + P
 
 -- Lista de Cosméticos Protegidos (atualize com os nomes do seu jogo!)
