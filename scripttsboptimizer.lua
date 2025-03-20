@@ -1,6 +1,6 @@
 -- Configurações
 local CLEAN_INTERVAL = 3 -- Intervalo de limpeza (evita stutters)
-local PARTS_PER_FRAME = 3 -- Processa 3 partes por frame
+local PARTS_PER_FRAME = 2
 local FREE_CAM_KEY = Enum.KeyCode.P -- Tecla do Freecam: Shift + P
 local CUTSCENE_FOLDER_NAME = "OmniDirectionalPunchCutscene" -- Pasta com os debris da cutscene
 
