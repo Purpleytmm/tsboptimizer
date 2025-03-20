@@ -1,54 +1,83 @@
 -- Configurações ULTRA-OTIMIZADAS
-local PARTS_PER_TICK = 38
-local SCAN_INTERVAL = 2
+local PARTS_PER_TICK = 1
+local SCAN_INTERVAL = 5
 local KEY_COMBO = {Enum.KeyCode.LeftShift, Enum.KeyCode.P}
 
--- Lista de EXCLUSÃO ESPECÍFICA (Efeitos para REMOVER)
-local BAN_LIST = {
-    -- Efeitos do Omni Punch Cutscene (linhas brancas)
-    ["trail"] = true, ["line_"] = true, ["slash_fx"] = true,
-    ["beam_effect"] = true, ["cutscene_line"] = true, ["whiteline"] = true,
-    
-    -- Efeitos do Flowing Water (Hero Hunter)
-    ["flowafterimage"] = true, ["waterclone"] = true, ["fadephantom"] = true,
-    ["slowfade"] = true, ["ripple_effect"] = true, ["flowfx"] = true,
-    ["ghosttrace"] = true, ["afterimage_fade"] = true
-}
-
--- Sistema de rastreamento para primeira linha
-local firstLineProtected = false
-
+-- Função de proteção TOTAL de personagens
 local function isProtected(obj)
-    -- Proteção da PRIMEIRA LINHA do Omni Punch
-    if obj.Name:lower():find("whiteline") then
-        if not firstLineProtected then
-            firstLineProtected = true
-            return true
-        end
-        return false
-    end
-
-    -- Verificação de efeitos BANIDOS
-    local lowerName = obj.Name:lower()
-    for bannedPattern in pairs(BAN_LIST) do
-        if lowerName:find(bannedPattern) then
-            return false  -- Permite destruição
-        end
-    end
-
-    -- Proteção padrão (personagens + outros efeitos)
+    -- Verificação ULTRA-RÁPIDA de personagem (nova técnica)
     local model = obj:FindFirstAncestorOfClass("Model")
-    return (model and model:FindFirstChild("Humanoid")) 
-        or lowerName:find("punch")
-        or lowerName:find("hitfx")
+    if model and model.PrimaryPart and model:FindFirstChild("Humanoid") then
+        return true
+    end
+
+    -- Protege partes do corpo por nome (mesmo em modelos diferentes)
+    local bodyParts = {
+        head = true, torso = true, leftarm = true, rightarm = true,
+        leftleg = true, rightleg = true, humanoidrootpart = true
+    }
+    if bodyParts[obj.Name:lower()] then
+        return true
+    end
+
+    -- Verificação de efeitos (mantém o punch)
+    local name = obj.Name:lower()
+    return  name:find("punch") or 
+            name:find("omni") or 
+            name:find("hit") or 
+            name:find("fx") or 
+            name:find("gfx")
 end
 
--- Sistema de limpeza OTIMIZADO (mesmo código anterior)
--- ... (mantenha o restante do código igual da versão anterior)
+-- Sistema de fila LOW MEMORY
+local queue = {}
+local pointer = 1
 
--- Reset da proteção da linha quando a cutscene terminar
-game:GetService("Workspace").ChildRemoved:Connect(function(child)
-    if child.Name:find("PunchCutscene") then
-        firstLineProtected = false
+-- Varredura inicial otimizada
+local function chunkedClean()
+    local descendants = workspace:GetDescendants()
+    for i = 1, #descendants, 10 do
+        local obj = descendants[i]
+        if obj:IsA("BasePart") and not obj.Anchored and not obj.CanCollide then
+            if not isProtected(obj) then
+                queue[#queue+1] = obj
+            end
+        end
+        if i % 50 == 0 then wait() end
+    end
+end
+
+-- Processamento MÍNIMO
+game:GetService("RunService").Heartbeat:Connect(function()
+    for _ = 1, PARTS_PER_TICK do
+        if queue[pointer] then
+            pcall(function() queue[pointer]:Destroy() end)
+            pointer += 1
+        else
+            queue = {}
+            pointer = 1
+            break
+        end
     end
 end)
+
+-- Detecção low-CPU
+spawn(function()
+    while wait(SCAN_INTERVAL) do
+        chunkedClean()
+    end
+end)
+
+-- Freecam ULTRA SIMPLES
+local camera = workspace.CurrentCamera
+local input = game:GetService("UserInputService")
+
+input.InputBegan:Connect(function(input)
+    if input.KeyCode == KEY_COMBO[2] and input:IsModifierKeyDown(KEY_COMBO[1]) then
+        camera.CameraType = camera.CameraType == Enum.CameraType.Custom 
+            and Enum.CameraType.Scriptable 
+            or Enum.CameraType.Custom
+    end
+end)
+
+spawn(chunkedClean)
