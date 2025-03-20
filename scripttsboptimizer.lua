@@ -1,201 +1,184 @@
--- Global Settings
-getgenv().Settings = {
-    Limb = {
-        Arms = true,
-        Legs = true
-    },
-    AntiLag = {
-        PartsPerTick = 45,
-        ScanInterval = 2
-    },
-    FreecamKey = {Enum.KeyCode.LeftShift, Enum.KeyCode.P}
-}
-
--- Shared Services
+-- Simple cleanup script with minimal overhead
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = workspace
 
--- Registry Systems
-local cutsceneRegistry = {}
-local executed = getgenv().executed
-
--- Body parts protection list
-local bodyParts = {
-    head = true, torso = true, humanoidrootpart = true,
-    leftarm = true, rightarm = true, leftleg = true, rightleg = true
+-- Configuration
+getgenv().Settings = {
+    Limb = {
+        Arms = true,
+        Legs = true
+    },
+    AntiLag = {
+        PartsPerTick = 35 -- Reduced from 45 to prevent stutters
+        ScanInterval = 2  -- Increased from 2 to reduce scanning frequency
+    },
+    FreecamKey = {Enum.KeyCode.LeftShift, Enum.KeyCode.P}
 }
 
--- Protection system
-local function isAncestorProtected(obj)
-    local current = obj
-    while current and current ~= game do
-        local lowerName = string.lower(current.Name)
-        if lowerName == "omnidirectionalpunchcutscene" or lowerName == "omnidirectionalpunchfolder" then
-            return true
-        end
-        current = current.Parent
-    end
-    return false
-end
+-- Protected names (lowercase for efficiency)
+local protectedNames = {
+    ["frozen"] = true,
+    ["soul"] = true,
+    ["meteor"] = true,
+    ["frozensoul"] = true,
+    ["head"] = true,
+    ["torso"] = true,
+    ["humanoidrootpart"] = true,
+    ["leftarm"] = true,
+    ["rightarm"] = true,
+    ["leftleg"] = true,
+    ["rightleg"] = true
+}
 
+-- Protected phrases for ancestors
+local protectedPhrases = {
+    "omnidirectional",
+    "punch",
+    "cutscene"
+}
+
+-- Simple protection check
 local function isProtected(obj)
-    if not obj or not obj.Name then return false end
-    
-    local lowerName = string.lower(obj.Name)
-    
-    -- Protect specific names
-    if lowerName == "frozen" or lowerName == "soul" or lowerName == "meteor" or lowerName == "frozensoul" then
+    -- Check if object itself is protected
+    if protectedNames[string.lower(obj.Name)] then
         return true
     end
     
-    -- Protect by ancestors
-    if isAncestorProtected(obj) then return true end
-    
-    -- Character model protection
+    -- Check if object is part of a character
     local model = obj:FindFirstAncestorOfClass("Model")
-    if model and model:FindFirstChild("Humanoid") then return true end
+    if model and model:FindFirstChildOfClass("Humanoid") then
+        return true
+    end
     
-    -- Body parts protection
-    if bodyParts[lowerName] then return true end
+    -- Check if object is part of a protected cutscene
+    local lowName = string.lower(obj.Name)
+    for _, phrase in ipairs(protectedPhrases) do
+        if lowName:find(phrase) then
+            return true
+        end
+    end
     
-    -- White line in cutscenes
-    if lowerName == "whiteline" then
-        local cutsceneModel = obj:FindFirstAncestorWhichIsA("Model")
-        if cutsceneModel then
-            if not cutsceneRegistry[cutsceneModel] then
-                cutsceneRegistry[cutsceneModel] = true
+    -- Check ancestors for protected names
+    local parent = obj.Parent
+    local checkCount = 0
+    while parent and checkCount < 3 do -- Limit ancestor checks to prevent deep recursion
+        local parentName = string.lower(parent.Name)
+        for _, phrase in ipairs(protectedPhrases) do
+            if parentName:find(phrase) then
                 return true
             end
-            return false
         end
+        parent = parent.Parent
+        checkCount = checkCount + 1
     end
     
-    return not (lowerName:find("afterimage") or lowerName:find("flowingwater"))
+    return false
 end
 
--- Cleanup queue
-local cleanupQueue = {}
-local queuePointer = 1
-
-local function CleanWorld()
-    local descendants = Workspace:GetDescendants()
-    for i = 1, #descendants do
-        local obj = descendants[i]
-        if obj:IsA("BasePart") and not isProtected(obj) and not obj.Anchored and not obj:FindFirstChildWhichIsA("Hitbox") then
-            table.insert(cleanupQueue, obj)
-        end
-        if i % 75 == 0 then task.wait() end
-    end
-end
-
--- Character System
+-- Character functions
 local function UpdateLimbs(character)
     if not character then return end
     
-    pcall(function()
-        if not Settings.Limb.Arms then
-            if character:FindFirstChild("Left Arm") then character["Left Arm"]:Destroy() end
-            if character:FindFirstChild("Right Arm") then character["Right Arm"]:Destroy() end
+    if not Settings.Limb.Arms then
+        if character:FindFirstChild("Left Arm") then
+            character["Left Arm"]:Destroy()
         end
-        if not Settings.Limb.Legs then
-            if character:FindFirstChild("Left Leg") then character["Left Leg"]:Destroy() end
-            if character:FindFirstChild("Right Leg") then character["Right Leg"]:Destroy() end
+        if character:FindFirstChild("Right Arm") then
+            character["Right Arm"]:Destroy()
+        end
+    end
+    
+    if not Settings.Limb.Legs then
+        if character:FindFirstChild("Left Leg") then
+            character["Left Leg"]:Destroy()
+        end
+        if character:FindFirstChild("Right Leg") then
+            character["Right Leg"]:Destroy()
+        end
+    end
+end
+
+local function ProcessCharacter(character)
+    if not character then return end
+    local rootPart = character:WaitForChild("HumanoidRootPart", 3)
+    if not rootPart then return end
+    
+    UpdateLimbs(character)
+    
+    rootPart.ChildAdded:Connect(function(child)
+        if child.Name == "dodgevelocity" then
+            local gui = LocalPlayer:FindFirstChild("PlayerGui")
+            if not gui then return end
+            
+            local screenGui = gui:FindFirstChild("ScreenGui")
+            if not screenGui then return end
+            
+            local magicHealth = screenGui:FindFirstChild("MagicHealth")
+            if not magicHealth then return end
+            
+            local health = magicHealth:FindFirstChild("Health")
+            if not health then return end
+            
+            local glow = health:FindFirstChild("Glow")
+            if glow then
+                glow.ImageColor3 = Color3.new(1, 1, 1)
+                task.delay(1.975, function()
+                    glow.ImageColor3 = Color3.new(0, 0, 0)
+                end)
+            end
         end
     end)
 end
 
--- Respawn System
-local function respawn(plr)
-    local char = plr.Character
-    if char:FindFirstChildOfClass("Humanoid") then 
-        char:FindFirstChildOfClass("Humanoid"):ChangeState(15) 
+-- Respawn function
+local function respawn(player)
+    local char = player.Character
+    if not char then return end
+    
+    if char:FindFirstChildOfClass("Humanoid") then
+        char:FindFirstChildOfClass("Humanoid"):ChangeState(15)
     end
     char:ClearAllChildren()
+    
     local newChar = Instance.new("Model")
     newChar.Parent = workspace
-    plr.Character = newChar
+    player.Character = newChar
     task.wait()
-    plr.Character = char
+    player.Character = char
     newChar:Destroy()
 end
 
-local function refresh(plr)
-    local Human = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid", true)
-    local pos = Human and Human.RootPart and Human.RootPart.CFrame
-    local pos1 = workspace.CurrentCamera.CFrame
-    respawn(plr)
-    task.spawn(function()
-        workspace.CurrentCamera.CFrame = wait() and pos1
-    end)
-end
-
--- Character Processing
-local function ProcessCharacter(char)
-    char:WaitForChild("HumanoidRootPart")
-    UpdateLimbs(char)
+-- Direct cleaning instead of queuing
+local function CleanDebris()
+    local toRemove = {}
+    local count = 0
     
-    char.HumanoidRootPart.ChildAdded:Connect(function(child)
-        if child.Name == "dodgevelocity" then
-            task.spawn(function()
-                local Dodge = true
-                local PlayerGui = LocalPlayer:FindFirstChild("PlayerGui")
-                if PlayerGui then
-                    local ScreenGui = PlayerGui:FindFirstChild("ScreenGui")
-                    if ScreenGui then
-                        local MagicHealth = ScreenGui:FindFirstChild("MagicHealth")
-                        if MagicHealth then
-                            local Health = MagicHealth:FindFirstChild("Health")
-                            if Health then
-                                local Glow = Health:FindFirstChild("Glow")
-                                if Glow then
-                                    for i = 1.975, 0, -1 do
-                                        if not Dodge then break end
-                                        Glow.ImageColor3 = Color3.fromRGB(255, 255, 255)
-                                        task.wait(1)
-                                        Glow.ImageColor3 = Color3.fromRGB(0, 0, 0)
-                                    end
-                                    Dodge = false
-                                end
-                            end
-                        end
-                    end
-                end
-            end)
-        elseif (child.Name == "moveme" or child.Name == "Sound") then
-            task.spawn(function()
-                local PlayerGui = LocalPlayer:FindFirstChild("PlayerGui")
-                if PlayerGui then
-                    local ScreenGui = PlayerGui:FindFirstChild("ScreenGui")
-                    if ScreenGui then
-                        local MagicHealth = ScreenGui:FindFirstChild("MagicHealth")
-                        if MagicHealth then
-                            local Text = MagicHealth:FindFirstChild("TextLabel")
-                            if Text then
-                                for i = 3.975, 0, -1 do
-                                    Text.TextColor3 = Color3.fromRGB(255, 50, 50)
-                                    task.wait(1)
-                                    Text.TextColor3 = Color3.fromRGB(255, 255, 255)
-                                end
-                            end
-                        end
-                    end
-                end
-            end)
+    -- First, collect debris to remove (faster than destroying during iteration)
+    for _, obj in pairs(Workspace.Thrown:GetChildren()) do
+        if obj:IsA("BasePart") and not isProtected(obj) then
+            count = count + 1
+            toRemove[count] = obj
         end
-    end)
+        if count >= Settings.AntiLag.PartsPerTick then break end
+    end
+    
+    -- Then destroy collected objects
+    for i = 1, count do
+        pcall(function()
+            toRemove[i]:Destroy()
+        end)
+    end
 end
 
--- Hook Systems
+-- Minimal hooks
 local oldIndex
 oldIndex = hookmetamethod(game, "__newindex", function(self, k, v)
-    if k == "Parent" then
-        if v == Workspace.Thrown or self:IsA("ParticleEmitter") then
-            pcall(function() self:Destroy() end)
-            return nil
-        end
+    if k == "Parent" and v == Workspace.Thrown then
+        pcall(function() self:Destroy() end)
+        return nil
     end
     return oldIndex(self, k, v)
 end)
@@ -203,7 +186,7 @@ end)
 local oldCall
 oldCall = hookmetamethod(game, "__namecall", function(self, ...)
     local method, args = getnamecallmethod(), {...}
-    if self.Name == "Communicate" and method == "FireServer" and args[1]["Goal"] == "Reset" then
+    if self.Name == "Communicate" and method == "FireServer" and args[1] and args[1]["Goal"] == "Reset" then
         task.spawn(function()
             respawn(LocalPlayer)
         end)
@@ -211,64 +194,48 @@ oldCall = hookmetamethod(game, "__namecall", function(self, ...)
     return oldCall(self, ...)
 end)
 
--- Thrown Object Handling
+-- Simplified cleanup for thrown objects
 Workspace:WaitForChild("Thrown").ChildAdded:Connect(function(obj)
-    task.wait()
-    if obj:IsA("BasePart") and not obj.Anchored and not obj:FindFirstChildWhichIsA("Hitbox") and not isProtected(obj) then
-        pcall(function() obj:Destroy() end)
-    end
-end)
-
--- Main Loop
-RunService.Heartbeat:Connect(function()
-    for _ = 1, Settings.AntiLag.PartsPerTick do
-        if cleanupQueue[queuePointer] then
+    if obj:IsA("BasePart") and not isProtected(obj) then
+        task.delay(0.1, function() -- Small delay to ensure the object is fully set up
             pcall(function() 
-                if cleanupQueue[queuePointer] and cleanupQueue[queuePointer].Parent then
-                    cleanupQueue[queuePointer]:Destroy() 
+                if obj and obj.Parent then
+                    obj:Destroy()
                 end
             end)
-            queuePointer = queuePointer + 1
-        else
-            if #cleanupQueue > 0 then
-                table.clear(cleanupQueue)
-            end
-            queuePointer = 1
-            break
-        end
-    end
-
-    if LocalPlayer.Character then
-        UpdateLimbs(LocalPlayer.Character)
+        end)
     end
 end)
 
--- Freecam Toggle
+-- Main cleanup loop
+task.spawn(function()
+    while task.wait(0.5) do -- Run more frequently but do less per cycle
+        CleanDebris()
+    end
+end)
+
+-- Character handling
+LocalPlayer.CharacterAdded:Connect(ProcessCharacter)
+if LocalPlayer.Character then
+    ProcessCharacter(LocalPlayer.Character)
+end
+
+-- Freecam feature
 UserInputService.InputBegan:Connect(function(input)
     if input.KeyCode == Settings.FreecamKey[2] and UserInputService:IsKeyDown(Settings.FreecamKey[1]) then
-        local currentCamera = Workspace.CurrentCamera
-        if currentCamera then
-            currentCamera.CameraType = (currentCamera.CameraType == Enum.CameraType.Custom) and Enum.CameraType.Scriptable or Enum.CameraType.Custom
+        local camera = Workspace.CurrentCamera
+        if camera then
+            camera.CameraType = (camera.CameraType == Enum.CameraType.Custom) and 
+                Enum.CameraType.Scriptable or Enum.CameraType.Custom
         end
     end
 end)
 
--- Initialization
-if not executed then
-    LocalPlayer.CharacterAdded:Connect(ProcessCharacter)
-    
-    if LocalPlayer.Character then
-        ProcessCharacter(LocalPlayer.Character)
+-- Memory optimization
+task.spawn(function()
+    while wait(30) do
+        collectgarbage("collect")
     end
-    
-    task.spawn(function()
-        while task.wait(Settings.AntiLag.ScanInterval) do
-            CleanWorld()
-        end
-    end)
-    
-    collectgarbage("setpause", 150)
-    collectgarbage("setstepmul", 250)
-    
-    getgenv().executed = true
-end
+end)
+
+print("Cleanup script loaded successfully")
