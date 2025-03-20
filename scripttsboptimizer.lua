@@ -1,61 +1,49 @@
 -- Configurações ULTRA-OTIMIZADAS
-local PARTS_PER_TICK = 3    
-local SCAN_INTERVAL = 1    
+local PARTS_PER_TICK = 3
+local SCAN_INTERVAL = 2
 local KEY_COMBO = {Enum.KeyCode.LeftShift, Enum.KeyCode.P}
 
---[[ 
-    PROTEGE:
-    - Personagens (mesmo que só tenham torso/cabeça)
-    - Efeitos do Omni Punch
-    - Nomes contendo: 'punch', 'omni', 'hit', 'fx', 'gfx'
-]]
+-- Função de proteção TOTAL de personagens
 local function isProtected(obj)
-    -- Verificação ultra-rápida de personagem
-    local root = obj:FindFirstAncestor("HumanoidRootPart")
-    if root and root.Parent:IsA("Model") then
+    -- Verificação ULTRA-RÁPIDA de personagem (nova técnica)
+    local model = obj:FindFirstAncestorOfClass("Model")
+    if model and model.PrimaryPart and model:FindFirstChild("Humanoid") then
         return true
     end
 
-    -- Verificação de nome por padrão (evita lista fixa)
+    -- Protege partes do corpo por nome (mesmo em modelos diferentes)
+    local bodyParts = {
+        head = true, torso = true, leftarm = true, rightarm = true,
+        leftleg = true, rightleg = true, humanoidrootpart = true
+    }
+    if bodyParts[obj.Name:lower()] then
+        return true
+    end
+
+    -- Verificação de efeitos (mantém o punch)
     local name = obj.Name:lower()
-    if  name:find("punch") or 
-        name:find("omni") or 
-        name:find("hit") or 
-        name:find("fx") or 
-        name:find("gfx") then
-        return true
-    end
-
-    -- Proteção hierárquica rápida
-    local parent = obj.Parent
-    while parent do
-        if parent:IsA("Model") then
-            local parentName = parent.Name:lower()
-            if parentName:find("effect") or parentName:find("aura") then
-                return true
-            end
-        end
-        parent = parent.Parent
-    end
-    
-    return false
+    return  name:find("punch") or 
+            name:find("omni") or 
+            name:find("hit") or 
+            name:find("fx") or 
+            name:find("gfx")
 end
 
 -- Sistema de fila LOW MEMORY
 local queue = {}
 local pointer = 1
 
--- Varredura inicial otimizada para "batata"
+-- Varredura inicial otimizada
 local function chunkedClean()
     local descendants = workspace:GetDescendants()
-    for i = 1, #descendants, 10 do  -- Processa em blocos de 10
+    for i = 1, #descendants, 10 do
         local obj = descendants[i]
         if obj:IsA("BasePart") and not obj.Anchored and not obj.CanCollide then
             if not isProtected(obj) then
                 queue[#queue+1] = obj
             end
         end
-        if i % 50 == 0 then wait() end  -- Alívio para CPUs fracas
+        if i % 50 == 0 then wait() end
     end
 end
 
@@ -73,7 +61,7 @@ game:GetService("RunService").Heartbeat:Connect(function()
     end
 end)
 
--- Detecção low-CPU de novos objetos
+-- Detecção low-CPU
 spawn(function()
     while wait(SCAN_INTERVAL) do
         chunkedClean()
@@ -92,5 +80,4 @@ input.InputBegan:Connect(function(input)
     end
 end)
 
--- Inicialização leve
 spawn(chunkedClean)
