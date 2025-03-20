@@ -1,28 +1,42 @@
---=# Configurações Globais #=--
-getgenv().Settings = {
+-- Global Settings
+if not getgenv().Settings then
+    getgenv().Settings = {}
+end
+
+local defaultSettings = {
     Limb = { Arms = true, Legs = true },
     AntiLag = { PartsPerTick = 38, ScanInterval = 2 },
     FreecamKey = {Enum.KeyCode.LeftShift, Enum.KeyCode.P}
 }
 
---=# Variáveis Essenciais #=--
+for key, value in pairs(defaultSettings) do
+    if getgenv().Settings[key] == nil then
+        getgenv().Settings[key] = value
+    end
+end
+local Settings = getgenv().Settings
+
+-- Essential variables
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
-local debris = {}
 local canClean = true
 
---=# Funções Auxiliares #=--
+-- Helper function
 local function Print(...)
     print("[XPurpleYT]:", ...)
 end
 
---=# Funções de Respawn do Script Original #=--
+-- Respawn functions
 local function respawn(plr)
+    if not plr or not plr.Character then return end
     local char = plr.Character
-    if char:FindFirstChildOfClass("Humanoid") then char:FindFirstChildOfClass("Humanoid"):ChangeState(15) end
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        humanoid:ChangeState(15)
+    end
     char:ClearAllChildren()
     local newChar = Instance.new("Model")
     newChar.Parent = workspace
@@ -33,26 +47,30 @@ local function respawn(plr)
 end
 
 local function refresh(plr)
-    local Human = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid", true)
+    if not plr or not plr.Character then return end
+    local Human = plr.Character:FindFirstChildOfClass("Humanoid")
     local pos = Human and Human.RootPart and Human.RootPart.CFrame
     local pos1 = workspace.CurrentCamera.CFrame
     respawn(plr)
     task.spawn(function()
-        workspace.CurrentCamera.CFrame = wait() and pos1
+        workspace.CurrentCamera.CFrame = pos1
     end)
 end
 
---=# Notificação #=--
+-- Notification
 local function CreateNotification()
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "XPurpleNotification"
     
-    -- Tentar usar CoreGui, mas cair para PlayerGui se não for possível
-    local parent = (pcall(function() return game:GetService("CoreGui") end) and game:GetService("CoreGui")) 
-                   or LocalPlayer:FindFirstChildOfClass("PlayerGui") 
+    -- Use CoreGui if possible, fallback to PlayerGui
+    local success, coreGui = pcall(function() return game:GetService("CoreGui") end)
+    local parent = (success and coreGui) or LocalPlayer:FindFirstChildOfClass("PlayerGui")
+    if not parent then
+        Print("Nenhum parent GUI encontrado!")
+        return
+    end
     screenGui.Parent = parent
     
-    -- Frame principal
     local mainFrame = Instance.new("Frame")
     mainFrame.Size = UDim2.new(0, 250, 0, 70)
     mainFrame.Position = UDim2.new(1, 300, 0.8, 0)
@@ -60,12 +78,10 @@ local function CreateNotification()
     mainFrame.BorderSizePixel = 0
     mainFrame.Parent = screenGui
     
-    -- Arredondar cantos
     local uiCorner = Instance.new("UICorner")
     uiCorner.CornerRadius = UDim.new(0, 6)
     uiCorner.Parent = mainFrame
     
-    -- Título
     local title = Instance.new("TextLabel")
     title.Size = UDim2.new(1, -20, 0, 30)
     title.Position = UDim2.new(0, 10, 0, 5)
@@ -77,7 +93,6 @@ local function CreateNotification()
     title.TextXAlignment = Enum.TextXAlignment.Left
     title.Parent = mainFrame
     
-    -- Texto
     local text = Instance.new("TextLabel")
     text.Size = UDim2.new(1, -20, 0, 20)
     text.Position = UDim2.new(0, 10, 0, 35)
@@ -89,15 +104,14 @@ local function CreateNotification()
     text.TextXAlignment = Enum.TextXAlignment.Left
     text.Parent = mainFrame
     
-    -- Animação de entrada
     mainFrame:TweenPosition(
         UDim2.new(1, -260, 0.8, 0),
         Enum.EasingDirection.Out,
         Enum.EasingStyle.Quad,
-        0.5
+        0.5,
+        true
     )
     
-    -- Remover após 5 segundos
     task.delay(5, function()
         mainFrame:TweenPosition(
             UDim2.new(1, 300, 0.8, 0),
@@ -106,58 +120,53 @@ local function CreateNotification()
             0.5,
             false,
             function()
-                screenGui:Destroy()
+                if screenGui then
+                    screenGui:Destroy()
+                end
             end
         )
     end)
 end
 
---=# Sistema de Limpeza Aprimorado #=--
+-- Debris cleaning system
 local function IsDebris(part)
-    -- Verifica se é um objeto que deve ser limpo
     if not part or not part:IsA("BasePart") then return false end
     
-    -- Ignorar partes de personagens
     local character = part:FindFirstAncestorOfClass("Model")
     if character and character:FindFirstChildOfClass("Humanoid") then
         return false
     end
     
-    -- Principais características de detritos
     if not part.Anchored and part.CanCollide == false then
-        -- Verifica nomes a ignorar
         local lowerName = part.Name:lower()
         local ignoreNames = {"frozen", "soul", "meteor", "punch", "omni"}
-        
         for _, name in ipairs(ignoreNames) do
             if string.find(lowerName, name) then
                 return false
             end
         end
-        
         return true
     end
-    
     return false
 end
 
 local function CleanGame()
     if not canClean then return end
     canClean = false
-    
-    -- Limpar objetos diretos no workspace
     local count = 0
-    for _, obj in pairs(workspace:GetChildren()) do
+    
+    -- Clean direct children in workspace
+    for _, obj in ipairs(workspace:GetChildren()) do
         if IsDebris(obj) then
             obj:Destroy()
             count = count + 1
         end
     end
     
-    -- Limpar detritos em pastas principais (mais profundas)
-    for _, container in pairs(workspace:GetChildren()) do
+    -- Clean debris in container objects
+    for _, container in ipairs(workspace:GetChildren()) do
         if container:IsA("Folder") or container:IsA("Model") then
-            for _, obj in pairs(container:GetChildren()) do
+            for _, obj in ipairs(container:GetChildren()) do
                 if IsDebris(obj) then
                     obj:Destroy()
                     count = count + 1
@@ -166,9 +175,10 @@ local function CleanGame()
         end
     end
     
-    -- Limpar pasta "Thrown" especificamente
-    if workspace:FindFirstChild("Thrown") then
-        for _, obj in pairs(workspace.Thrown:GetChildren()) do
+    -- Clean "Thrown" folder specifically
+    local thrownFolder = workspace:FindFirstChild("Thrown")
+    if thrownFolder then
+        for _, obj in ipairs(thrownFolder:GetChildren()) do
             obj:Destroy()
             count = count + 1
         end
@@ -180,23 +190,20 @@ local function CleanGame()
     end
 end
 
---=# Sistema Freecam #=--
+-- Freecam system
 local freecamEnabled = false
 local originalCameraSubject = nil
 local keysDown = {}
 
 local function ToggleFreecam()
     freecamEnabled = not freecamEnabled
-    
     if freecamEnabled then
-        -- Ativar freecam
         if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
             originalCameraSubject = Camera.CameraSubject
             Camera.CameraSubject = nil
         end
         Print("Freecam ativado")
     else
-        -- Desativar freecam
         Camera.CameraSubject = originalCameraSubject
         Print("Freecam desativado")
     end
@@ -204,11 +211,7 @@ end
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
-    
-    -- Rastrear teclas pressionadas
     keysDown[input.KeyCode] = true
-    
-    -- Verificar combinação de teclas para freecam
     local allKeysPressed = true
     for _, keyCode in ipairs(Settings.FreecamKey) do
         if not keysDown[keyCode] then
@@ -216,7 +219,6 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
             break
         end
     end
-    
     if allKeysPressed then
         ToggleFreecam()
     end
@@ -226,101 +228,109 @@ UserInputService.InputEnded:Connect(function(input)
     keysDown[input.KeyCode] = nil
 end)
 
---=# Funções de Processamento do Personagem #=--
+-- Process character functions
 local function Process()
-    LocalPlayer.Character:WaitForChild("HumanoidRootPart")
-    LocalPlayer.Character.HumanoidRootPart.ChildAdded:Connect(function(child)
+    if not LocalPlayer.Character then return end
+    local char = LocalPlayer.Character
+    local hrp = char:WaitForChild("HumanoidRootPart", 5)
+    if not hrp then return end
+    
+    hrp.ChildAdded:Connect(function(child)
         local Dodge = false
-        if (child.Name == "dodgevelocity") then
+        if child.Name == "dodgevelocity" then
             task.spawn(function()
                 Dodge = true
-                local Glow = LocalPlayer.PlayerGui.ScreenGui.MagicHealth.Health.Glow
-                for i = 1.975, 0, -1 do
-                    if Dodge == false then break end
-                    Glow.ImageColor3 = Color3.fromRGB(255,255,255)
+                local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+                local magicHealthGui = playerGui and playerGui:FindFirstChild("ScreenGui")
+                local health = magicHealthGui and magicHealthGui:FindFirstChild("MagicHealth")
+                local glow = health and health:FindFirstChild("Health") and health.Health:FindFirstChild("Glow")
+                if not glow then return end
+                for i = 2, 0, -1 do
+                    if not Dodge then break end
+                    glow.ImageColor3 = Color3.fromRGB(255,255,255)
                     task.wait(1)
-                    Glow.ImageColor3 = Color3.fromRGB(0,0,0)
+                    glow.ImageColor3 = Color3.fromRGB(0,0,0)
                 end
                 Dodge = false
             end)
-        elseif (child.Name == "moveme" or child.Name == "Sound" and Dodge) then
+        elseif child.Name == "moveme" or (child.Name == "Sound" and Dodge) then
             task.spawn(function()
                 Dodge = false
-                local Text = LocalPlayer.PlayerGui.ScreenGui.MagicHealth.TextLabel
-                for i = 3.975, 0, -1 do
-                    Text.TextColor3 = Color3.fromRGB(255,50,50)
+                local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+                local magicHealthGui = playerGui and playerGui:FindFirstChild("ScreenGui")
+                local health = magicHealthGui and magicHealthGui:FindFirstChild("MagicHealth")
+                local textLabel = health and health:FindFirstChild("TextLabel")
+                if not textLabel then return end
+                for i = 4, 0, -1 do
+                    textLabel.TextColor3 = Color3.fromRGB(255,50,50)
                     task.wait(1)
-                    Text.TextColor3 = Color3.fromRGB(255,255,255)
+                    textLabel.TextColor3 = Color3.fromRGB(255,255,255)
                 end
             end)
         end
     end)
 end
 
---=# Inicialização e Loops #=--
+-- Initialization and loops
 if not getgenv().executed then
-    -- Hook para reset
-    local nameCallHook
-    nameCallHook = hookmetamethod(game, "__namecall", function(self, ...)
-        local method, args = getnamecallmethod(), {...}
-        if self.Name == "Communicate" and method == "FireServer" and args[1]["Goal"] == "Reset" then
+    -- Hook for reset (using metamethods)
+    local oldNameCall
+    oldNameCall = hookmetamethod(game, "__namecall", function(self, ...)
+        local method = getnamecallmethod()
+        local args = {...}
+        if self.Name == "Communicate" and method == "FireServer" and args[1] and args[1]["Goal"] == "Reset" then
             task.spawn(function()
                 respawn(LocalPlayer)
             end)
         end
-        return nameCallHook(self, ...)
+        return oldNameCall(self, ...)
     end)
-
-    -- Hook para anti-thrown e anti-particle
-    local newIndexHook
-    newIndexHook = hookmetamethod(game, "__newindex", function(self, k, v)
-        local char = self:FindFirstAncestorWhichIsA("Model")
-        local player = Players:GetPlayerFromCharacter(char)
-        if k == "Parent" and (v == workspace.Thrown or self:IsA("ParticleEmitter")) then
+    
+    local oldNewIndex
+    oldNewIndex = hookmetamethod(game, "__newindex", function(self, k, v)
+        if k == "Parent" and (v == workspace:FindFirstChild("Thrown") or self:IsA("ParticleEmitter")) then
             self:Destroy()
             return nil
         end
-        return newIndexHook(self, k, v)
+        return oldNewIndex(self, k, v)
     end)
-
-    -- Monitorar Thrown
+    
     if workspace:FindFirstChild("Thrown") then
         workspace.Thrown.ChildAdded:Connect(function(instance)
             task.wait()
             instance:Destroy()
         end)
     end
-
-    -- Inicializar processo para personagem atual
+    
     if LocalPlayer.Character then
         Process()
     end
-    
-    -- Conectar para personagens futuros
     LocalPlayer.CharacterAdded:Connect(Process)
-
-    -- Loop principal para limbs
+    
     RunService.RenderStepped:Connect(function()
         local char = LocalPlayer.Character
         if not char then return end
         
-        -- Gerenciamento de membros
+        -- Manage limbs
         if char:FindFirstChild("Left Arm") and char:FindFirstChild("Right Arm") then
             if not Settings.Limb.Arms then
-                char:FindFirstChild("Left Arm"):Destroy()
-                char:FindFirstChild("Right Arm"):Destroy()
+                local leftArm = char:FindFirstChild("Left Arm")
+                local rightArm = char:FindFirstChild("Right Arm")
+                if leftArm then leftArm:Destroy() end
+                if rightArm then rightArm:Destroy() end
             end
             if not Settings.Limb.Legs then
-                char:FindFirstChild("Left Leg"):Destroy()
-                char:FindFirstChild("Right Leg"):Destroy()
+                local leftLeg = char:FindFirstChild("Left Leg")
+                local rightLeg = char:FindFirstChild("Right Leg")
+                if leftLeg then leftLeg:Destroy() end
+                if rightLeg then rightLeg:Destroy() end
             end
         end
         
-        -- Freecam
+        -- Freecam movement
         if freecamEnabled then
             local moveSpeed = 1
             local cf = Camera.CFrame
-            
             if UserInputService:IsKeyDown(Enum.KeyCode.W) then
                 Camera.CFrame = cf + cf.LookVector * moveSpeed
             end
@@ -342,7 +352,7 @@ if not getgenv().executed then
         end
     end)
     
-    -- Loop de limpeza direta (sem fila)
+    -- Periodically clean debris
     task.spawn(function()
         while task.wait(Settings.AntiLag.ScanInterval) do
             CleanGame()
