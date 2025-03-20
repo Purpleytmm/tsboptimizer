@@ -1,104 +1,50 @@
 -- Configurações
-local CLEAN_INTERVAL = 1 -- Tempo entre limpezas
-local PARTS_PER_FRAME = 1000 -- Partes processadas por frame
-local FREE_CAM_KEY = Enum.KeyCode.P -- Tecla do Freecam: Shift + P
-
--- Lista de Cosméticos Protegidos (atualize com os nomes do seu jogo!)
-local PROTECTED_COSMETICS = {
-    "Worn Cape", "Mahoraga Well", "Cloak", "Aura", "Effect",
-    "Accessory", "Hat", "Wings", "Skin", "Cosmetic", "Cape"
+local CLEAN_INTERVAL = 2 -- Limpeza a cada 2 segundos
+local PROTECTED_NAMES = { -- Atualize com os nomes do seu jogo!
+    "Tree", "Dummy", "Humanoid", "Accessory", 
+    "Cape", "Aura", "Effect", "Hat", "Wings", 
+    "Skin", "FlowingWaterGFX", "WeakestDummy"
 }
 
---[[ 
-    VERIFICA SE O OBJETO É PROTEGIDO (Players/Dummies/Árvores/Cosméticos)
---]]
+-- Verificação Ultra-Otimizada (FIXED)
 local function isProtected(obj)
-    -- Verifica se é parte de um Player
-    local player = game.Players:GetPlayerFromCharacter(obj.Parent)
-    if player then return true end
+    -- Players: Verifica se é parte de um Model com Humanoid
+    local model = obj:FindFirstAncestorOfClass("Model")
+    if model and model:FindFirstChild("Humanoid") then
+        return true
+    end
 
-    -- Verifica se é um Cosmético
-    local name = obj.Name:lower()
-    for _, keyword in pairs(PROTECTED_COSMETICS) do
-        if name:find(keyword:lower()) then
+    -- Árvores e Dummies
+    if model then
+        local modelName = model.Name:lower()
+        if modelName:match("tree") or modelName:match("dummy") then
             return true
         end
     end
 
-    -- Verifica Dummies/Árvores
-    local model = obj:FindFirstAncestorOfClass("Model")
-    if model then
-        local modelName = model.Name:lower()
-        return model:FindFirstChild("Humanoid") or 
-               modelName:find("tree") or 
-               modelName:find("dummy")
+    -- Verificação por Nome (Acessórios)
+    local name = obj.Name:lower()
+    for _, keyword in pairs(PROTECTED_NAMES) do
+        if name:match(keyword:lower()) then
+            return true
+        end
     end
-    
+
     return false
 end
 
---[[ 
-    FREECAM (Shift + P) - Funciona durante cutscenes!
---]]
-local camera = workspace.CurrentCamera
-local freecamActive = false
-local freecamPos, freecamCF
-
-local function toggleFreecam()
-    freecamActive = not freecamActive
-    if freecamActive then
-        freecamPos = camera.CFrame.Position
-        freecamCF = camera.CFrame
-        camera.CameraType = Enum.CameraType.Scriptable
-    else
-        camera.CameraType = Enum.CameraType.Custom
-        camera.CFrame = freecamCF
-    end
-end
-
-game:GetService("UserInputService").InputBegan:Connect(function(input)
-    if input.KeyCode == FREE_CAM_KEY and input:IsModifierKeyDown(Enum.ModifierKey.Shift) then
-        toggleFreecam()
-    end
-end)
-
---[[ 
-    SISTEMA DE LIMPEZA (Otimizado para Low-End)
---]]
-local queue = {}
-workspace.DescendantAdded:Connect(function(obj)
-    if obj:IsA("BasePart") and not obj.Anchored and not obj.CanCollide and not isProtected(obj) then
-        -- Remove GFX do Flowing Water (após verificação)
-        if obj.Name:lower():find("flowingwater") or obj.Name:lower():find("gfx") then
-            obj:Destroy()
-        else
-            table.insert(queue, obj)
-        end
-    end
-end)
-
--- Processamento leve (5 partes/frame)
-task.spawn(function()
-    while task.wait(0.1) do
-        for i = 1, math.min(PARTS_PER_FRAME, #queue) do
-            if queue[1] then
-                pcall(queue[1].Destroy, queue[1])
-                table.remove(queue, 1)
+-- Sistema de Limpeza Direto
+local function CleanDebris()
+    for _, obj in pairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") and not obj.Anchored and not obj.CanCollide then
+            if not isProtected(obj) then
+                pcall(obj.Destroy, obj)
             end
         end
     end
-end)
+end
 
---[[ 
-    INICIALIZAÇÃO (Remove debris existentes)
---]]
-for _, obj in pairs(workspace:GetDescendants()) do
-    if obj:IsA("BasePart") and not obj.Anchored and not obj.CanCollide and not isProtected(obj) then
-        -- Remove GFX do Flowing Water (após verificação)
-        if obj.Name:lower():find("flowingwater") or obj.Name:lower():find("gfx") then
-            obj:Destroy()
-        else
-            obj:Destroy()
-        end
-    end
+-- Loop Principal
+while task.wait(CLEAN_INTERVAL) do
+    CleanDebris()
 end
