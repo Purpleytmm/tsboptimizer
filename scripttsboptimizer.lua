@@ -5,7 +5,7 @@ getgenv().Settings = {
         Legs = true
     },
     AntiLag = {
-        PartsPerTick = 38,
+        PartsPerTick = 45,
         ScanInterval = 2
     },
     FreecamKey = {Enum.KeyCode.LeftShift, Enum.KeyCode.P}
@@ -185,3 +185,4 @@ end)
 --=# Otimização Final #=--
 collectgarbage("setpause", 150)
 collectgarbage("setstepmul", 250)
+
