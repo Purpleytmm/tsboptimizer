@@ -5,7 +5,7 @@ getgenv().Settings = {
         Legs = true
     },
     AntiLag = {
-        PartsPerTick = 3,
+        PartsPerTick = 38,
         ScanInterval = 2
     },
     FreecamKey = {Enum.KeyCode.LeftShift, Enum.KeyCode.P}
