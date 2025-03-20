@@ -1,74 +1,98 @@
--- Configurações ULTRA-OTIMIZADAS
+--=# Configurações Principais #=--
 local PARTS_PER_TICK = 3
 local SCAN_INTERVAL = 2
 local KEY_COMBO = {Enum.KeyCode.LeftShift, Enum.KeyCode.P}
 
--- Função de proteção TOTAL de personagens
+--=# Sistema de Registro de Cutscenes #=--
+local cutsceneRegistry = {}
+local function registerCutscene(cutsceneModel)
+    if not cutsceneRegistry[cutsceneModel] then
+        cutsceneRegistry[cutsceneModel] = {
+            firstLineProtected = false,
+            connection = cutsceneModel.AncestryChanged:Connect(function(_, parent)
+                if not parent then
+                    cutsceneRegistry[cutsceneModel] = nil
+                end
+            end)
+        }
+    end
+end
+
+--=# Função de Proteção 2.0 #=--
+local bodyParts = {
+    head = true, torso = true, humanoidrootpart = true,
+    leftarm = true, rightarm = true, leftleg = true, rightleg = true
+}
+
 local function isProtected(obj)
-    -- Verificação ULTRA-RÁPIDA de personagem (nova técnica)
+    -- Verificação RÁPIDA de personagem
     local model = obj:FindFirstAncestorOfClass("Model")
-    if model and model.PrimaryPart and model:FindFirstChild("Humanoid") then
+    if model and model:FindFirstChild("Humanoid") then
         return true
     end
 
-    -- Protege partes do corpo por nome (mesmo em modelos diferentes)
-    local bodyParts = {
-        head = true, torso = true, leftarm = true, rightarm = true,
-        leftleg = true, rightleg = true, humanoidrootpart = true
-    }
+    -- Proteção de partes do corpo
     if bodyParts[obj.Name:lower()] then
         return true
     end
 
-    -- Verificação de efeitos (mantém o punch)
-    local name = obj.Name:lower()
-    return  name:find("punch") or 
-            name:find("omni") or 
-            name:find("hit") or 
-            name:find("fx") or 
-            name:find("gfx")
+    -- Controle MULTI-INSTÂNCIA de linhas brancas
+    if obj.Name:lower() == "whiteline" then
+        local cutsceneModel = obj:FindFirstAncestorWhichIsA("Model")
+        if cutsceneModel then
+            registerCutscene(cutsceneModel)
+            if not cutsceneRegistry[cutsceneModel].firstLineProtected then
+                cutsceneRegistry[cutsceneModel].firstLineProtected = true
+                return true -- Mantém primeira linha
+            end
+            return false -- Remove linhas extras
+        end
+    end
+
+    -- Filtro de efeitos indesejados
+    local lowerName = obj.Name:lower()
+    if lowerName:find("afterimage") 
+        or lowerName:find("flowingwater")
+        or lowerName:find("_trail") then
+        return false
+    end
+
+    -- Mantém efeitos essenciais
+    return lowerName:find("punch") or lowerName:find("hitfx")
 end
 
--- Sistema de fila LOW MEMORY
+--=# Sistema de Limpeza Otimizado #=--
 local queue = {}
 local pointer = 1
 
--- Varredura inicial otimizada
 local function chunkedClean()
     local descendants = workspace:GetDescendants()
-    for i = 1, #descendants, 10 do
+    for i = 1, #descendants, 15 do -- Processamento em blocos
         local obj = descendants[i]
         if obj:IsA("BasePart") and not obj.Anchored and not obj.CanCollide then
             if not isProtected(obj) then
-                queue[#queue+1] = obj
+                table.insert(queue, obj)
             end
         end
-        if i % 50 == 0 then wait() end
+        if i % 75 == 0 then task.wait() end -- Alívio de CPU
     end
 end
 
--- Processamento MÍNIMO
+--=# Processamento Principal #=--
 game:GetService("RunService").Heartbeat:Connect(function()
     for _ = 1, PARTS_PER_TICK do
         if queue[pointer] then
-            pcall(function() queue[pointer]:Destroy() end)
+            pcall(queue[pointer].Destroy, queue[pointer])
             pointer += 1
         else
-            queue = {}
+            table.clear(queue)
             pointer = 1
             break
         end
     end
 end)
 
--- Detecção low-CPU
-spawn(function()
-    while wait(SCAN_INTERVAL) do
-        chunkedClean()
-    end
-end)
-
--- Freecam ULTRA SIMPLES
+--=# Freecam ULTRA LEVE #=--
 local camera = workspace.CurrentCamera
 local input = game:GetService("UserInputService")
 
@@ -80,4 +104,13 @@ input.InputBegan:Connect(function(input)
     end
 end)
 
-spawn(chunkedClean)
+--=# Execução Automática #=--
+task.spawn(function()
+    while task.wait(SCAN_INTERVAL) do
+        chunkedClean()
+    end
+end)
+
+--=# Otimização Final #=--
+collectgarbage("setpause", 100)
+collectgarbage("setstepmul", 200)
