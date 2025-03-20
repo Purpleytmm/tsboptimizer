@@ -35,9 +35,20 @@ local function isProtected(obj)
     if bodyParts[obj.Name:lower()] then
         return true
     end
+    
+    -- PERMISSÃO ESPECIAL: Meteor
+    local lowerName = obj.Name:lower()
+    if lowerName:find("meteor") then
+        return true
+    end
+
+    -- PERMISSÃO ESPECIAL: Meteor do Frozen Soul
+    if lowerName:find("frozen") and lowerName:find("soul") then
+        return true
+    end
 
     -- Controle MULTI-INSTÂNCIA de linhas brancas
-    if obj.Name:lower() == "whiteline" then
+    if lowerName == "whiteline" then
         local cutsceneModel = obj:FindFirstAncestorWhichIsA("Model")
         if cutsceneModel then
             registerCutscene(cutsceneModel)
@@ -50,10 +61,9 @@ local function isProtected(obj)
     end
 
     -- Filtro de efeitos indesejados
-    local lowerName = obj.Name:lower()
     if lowerName:find("afterimage") 
-        or lowerName:find("flowingwater")
-        or lowerName:find("_trail") then
+       or lowerName:find("flowingwater")
+       or lowerName:find("_trail") then
         return false
     end
 
@@ -74,7 +84,9 @@ local function chunkedClean()
                 table.insert(queue, obj)
             end
         end
-        if i % 75 == 0 then task.wait() end -- Alívio de CPU
+        if i % 75 == 0 then
+            task.wait() -- Alívio de CPU
+        end
     end
 end
 
@@ -83,7 +95,7 @@ game:GetService("RunService").Heartbeat:Connect(function()
     for _ = 1, PARTS_PER_TICK do
         if queue[pointer] then
             pcall(queue[pointer].Destroy, queue[pointer])
-            pointer += 1
+            pointer = pointer + 1
         else
             table.clear(queue)
             pointer = 1
@@ -94,9 +106,9 @@ end)
 
 --=# Freecam ULTRA LEVE #=--
 local camera = workspace.CurrentCamera
-local input = game:GetService("UserInputService")
+local inputService = game:GetService("UserInputService")
 
-input.InputBegan:Connect(function(input)
+inputService.InputBegan:Connect(function(input)
     if input.KeyCode == KEY_COMBO[2] and input:IsModifierKeyDown(KEY_COMBO[1]) then
         camera.CameraType = camera.CameraType == Enum.CameraType.Custom 
             and Enum.CameraType.Scriptable 
