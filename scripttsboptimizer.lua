@@ -19,31 +19,27 @@ local function Print(...)
     print("[XPurpleYT]:", ...)
 end
 
-local function IsLagPart(part)
-    -- Verifica se é um parte que deve ser limpa
-    if not part:IsA("BasePart") then return false end
-    
-    -- Partes de personagens devem ser preservadas
-    local character = part:FindFirstAncestorOfClass("Model")
-    if character and character:FindFirstChildOfClass("Humanoid") then
-        return false
-    end
-    
-    -- Partes ancoradas ou com colisão geralmente são importantes
-    if part.Anchored or part.CanCollide then 
-        return false 
-    end
-    
-    -- Nomes de partes que devemos preservar
-    local namesToKeep = {"frozen", "soul", "frozensoul", "meteor", "punch", "omni"}
-    local lowerName = part.Name:lower()
-    for _, name in ipairs(namesToKeep) do
-        if string.find(lowerName, name) then
-            return false
-        end
-    end
-    
-    return true
+--=# Funções de Respawn do Script Original #=--
+local function respawn(plr)
+    local char = plr.Character
+    if char:FindFirstChildOfClass("Humanoid") then char:FindFirstChildOfClass("Humanoid"):ChangeState(15) end
+    char:ClearAllChildren()
+    local newChar = Instance.new("Model")
+    newChar.Parent = workspace
+    plr.Character = newChar
+    task.wait()
+    plr.Character = char
+    newChar:Destroy()
+end
+
+local function refresh(plr)
+    local Human = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid", true)
+    local pos = Human and Human.RootPart and Human.RootPart.CFrame
+    local pos1 = workspace.CurrentCamera.CFrame
+    respawn(plr)
+    task.spawn(function()
+        workspace.CurrentCamera.CFrame = wait() and pos1
+    end)
 end
 
 --=# Notificação #=--
@@ -116,79 +112,71 @@ local function CreateNotification()
     end)
 end
 
---=# Sistema de Limpeza #=--
+--=# Sistema de Limpeza Aprimorado #=--
+local function IsDebris(part)
+    -- Verifica se é um objeto que deve ser limpo
+    if not part or not part:IsA("BasePart") then return false end
+    
+    -- Ignorar partes de personagens
+    local character = part:FindFirstAncestorOfClass("Model")
+    if character and character:FindFirstChildOfClass("Humanoid") then
+        return false
+    end
+    
+    -- Principais características de detritos
+    if not part.Anchored and part.CanCollide == false then
+        -- Verifica nomes a ignorar
+        local lowerName = part.Name:lower()
+        local ignoreNames = {"frozen", "soul", "meteor", "punch", "omni"}
+        
+        for _, name in ipairs(ignoreNames) do
+            if string.find(lowerName, name) then
+                return false
+            end
+        end
+        
+        return true
+    end
+    
+    return false
+end
+
 local function CleanGame()
     if not canClean then return end
     canClean = false
     
-    -- Limite a coleta para evitar lag
-    local maxItems = 1000
+    -- Limpar objetos diretos no workspace
     local count = 0
-    
-    -- Limpar workspace
-    for _, obj in pairs(workspace:GetDescendants()) do
-        if IsLagPart(obj) and count < maxItems then
-            table.insert(debris, obj)
+    for _, obj in pairs(workspace:GetChildren()) do
+        if IsDebris(obj) then
+            obj:Destroy()
             count = count + 1
         end
-        
-        -- Algumas vezes cede o processamento para evitar travamentos
-        if count % 100 == 0 then
-            task.wait()
+    end
+    
+    -- Limpar detritos em pastas principais (mais profundas)
+    for _, container in pairs(workspace:GetChildren()) do
+        if container:IsA("Folder") or container:IsA("Model") then
+            for _, obj in pairs(container:GetChildren()) do
+                if IsDebris(obj) then
+                    obj:Destroy()
+                    count = count + 1
+                end
+            end
         end
     end
     
     -- Limpar pasta "Thrown" especificamente
     if workspace:FindFirstChild("Thrown") then
         for _, obj in pairs(workspace.Thrown:GetChildren()) do
-            table.insert(debris, obj)
+            obj:Destroy()
+            count = count + 1
         end
     end
     
     canClean = true
-    Print("Escaneou " .. count .. " itens para limpeza")
-end
-
---=# Processamento de Debris #=--
-local function ProcessDebris()
-    local processCount = 0
-    local maxPerFrame = Settings.AntiLag.PartsPerTick
-    
-    for i = #debris, 1, -1 do
-        if processCount >= maxPerFrame then break end
-        
-        local obj = debris[i]
-        if obj and obj:IsDescendantOf(game) then
-            obj:Destroy()
-        end
-        
-        table.remove(debris, i)
-        processCount = processCount + 1
-    end
-    
-    if processCount > 0 then
-        Print("Removidos " .. processCount .. " detritos")
-    end
-end
-
---=# Sistema de Membros #=--
-local function UpdateLimbs(character)
-    if not character then return end
-    
-    for _, side in pairs({"Right", "Left"}) do
-        -- Braços
-        local arm = character:FindFirstChild(side.."Arm") or character:FindFirstChild(side.." Arm")
-        if arm and not Settings.Limb.Arms then
-            arm:Destroy()
-            Print("Removido: " .. arm.Name)
-        end
-        
-        -- Pernas
-        local leg = character:FindFirstChild(side.."Leg") or character:FindFirstChild(side.." Leg")
-        if leg and not Settings.Limb.Legs then
-            leg:Destroy()
-            Print("Removido: " .. leg.Name)
-        end
+    if count > 0 then
+        Print("Removidos " .. count .. " itens de lag")
     end
 end
 
@@ -238,116 +226,131 @@ UserInputService.InputEnded:Connect(function(input)
     keysDown[input.KeyCode] = nil
 end)
 
---=# Anti-Particle System #=--
-local function CreateAntiParticleSystem()
-    -- Hook para impedir a criação de partículas
-    local oldNewindex = nil
-    oldNewindex = hookmetamethod(game, "__newindex", function(self, index, value)
-        -- Anti-throw (detritos)
-        if index == "Parent" and self and typeof(self) == "Instance" then
-            if workspace:FindFirstChild("Thrown") and value == workspace.Thrown then
-                self:Destroy()
-                Print("Bloqueado item sendo jogado")
-                return
+--=# Funções de Processamento do Personagem #=--
+local function Process()
+    LocalPlayer.Character:WaitForChild("HumanoidRootPart")
+    LocalPlayer.Character.HumanoidRootPart.ChildAdded:Connect(function(child)
+        local Dodge = false
+        if (child.Name == "dodgevelocity") then
+            task.spawn(function()
+                Dodge = true
+                local Glow = LocalPlayer.PlayerGui.ScreenGui.MagicHealth.Health.Glow
+                for i = 1.975, 0, -1 do
+                    if Dodge == false then break end
+                    Glow.ImageColor3 = Color3.fromRGB(255,255,255)
+                    task.wait(1)
+                    Glow.ImageColor3 = Color3.fromRGB(0,0,0)
+                end
+                Dodge = false
+            end)
+        elseif (child.Name == "moveme" or child.Name == "Sound" and Dodge) then
+            task.spawn(function()
+                Dodge = false
+                local Text = LocalPlayer.PlayerGui.ScreenGui.MagicHealth.TextLabel
+                for i = 3.975, 0, -1 do
+                    Text.TextColor3 = Color3.fromRGB(255,50,50)
+                    task.wait(1)
+                    Text.TextColor3 = Color3.fromRGB(255,255,255)
+                end
+            end)
+        end
+    end)
+end
+
+--=# Inicialização e Loops #=--
+if not getgenv().executed then
+    -- Hook para reset
+    local nameCallHook
+    nameCallHook = hookmetamethod(game, "__namecall", function(self, ...)
+        local method, args = getnamecallmethod(), {...}
+        if self.Name == "Communicate" and method == "FireServer" and args[1]["Goal"] == "Reset" then
+            task.spawn(function()
+                respawn(LocalPlayer)
+            end)
+        end
+        return nameCallHook(self, ...)
+    end)
+
+    -- Hook para anti-thrown e anti-particle
+    local newIndexHook
+    newIndexHook = hookmetamethod(game, "__newindex", function(self, k, v)
+        local char = self:FindFirstAncestorWhichIsA("Model")
+        local player = Players:GetPlayerFromCharacter(char)
+        if k == "Parent" and (v == workspace.Thrown or self:IsA("ParticleEmitter")) then
+            self:Destroy()
+            return nil
+        end
+        return newIndexHook(self, k, v)
+    end)
+
+    -- Monitorar Thrown
+    if workspace:FindFirstChild("Thrown") then
+        workspace.Thrown.ChildAdded:Connect(function(instance)
+            task.wait()
+            instance:Destroy()
+        end)
+    end
+
+    -- Inicializar processo para personagem atual
+    if LocalPlayer.Character then
+        Process()
+    end
+    
+    -- Conectar para personagens futuros
+    LocalPlayer.CharacterAdded:Connect(Process)
+
+    -- Loop principal para limbs
+    RunService.RenderStepped:Connect(function()
+        local char = LocalPlayer.Character
+        if not char then return end
+        
+        -- Gerenciamento de membros
+        if char:FindFirstChild("Left Arm") and char:FindFirstChild("Right Arm") then
+            if not Settings.Limb.Arms then
+                char:FindFirstChild("Left Arm"):Destroy()
+                char:FindFirstChild("Right Arm"):Destroy()
             end
+            if not Settings.Limb.Legs then
+                char:FindFirstChild("Left Leg"):Destroy()
+                char:FindFirstChild("Right Leg"):Destroy()
+            end
+        end
+        
+        -- Freecam
+        if freecamEnabled then
+            local moveSpeed = 1
+            local cf = Camera.CFrame
             
-            -- Anti-particle
-            if self:IsA("ParticleEmitter") or self:IsA("Trail") or self:IsA("Beam") or self:IsA("Smoke") then
-                self:Destroy()
-                Print("Bloqueado efeito de partícula")
-                return
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+                Camera.CFrame = cf + cf.LookVector * moveSpeed
+            end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+                Camera.CFrame = cf - cf.LookVector * moveSpeed
+            end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+                Camera.CFrame = cf - cf.RightVector * moveSpeed
+            end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+                Camera.CFrame = cf + cf.RightVector * moveSpeed
+            end
+            if UserInputService:IsKeyDown(Enum.KeyCode.E) then
+                Camera.CFrame = cf + cf.UpVector * moveSpeed
+            end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Q) then
+                Camera.CFrame = cf - cf.UpVector * moveSpeed
             end
         end
-        
-        return oldNewindex(self, index, value)
     end)
     
-    -- Hook para neutralizar emissores existentes
-    for _, particle in pairs(workspace:GetDescendants()) do
-        if particle:IsA("ParticleEmitter") or particle:IsA("Trail") or particle:IsA("Beam") or particle:IsA("Smoke") then
-            particle.Enabled = false
-            particle:Destroy()
+    -- Loop de limpeza direta (sem fila)
+    task.spawn(function()
+        while task.wait(Settings.AntiLag.ScanInterval) do
+            CleanGame()
         end
-    end
-    
-    Print("Sistema anti-partículas instalado")
-end
-
---=# Monitoramento de Thrown #=--
-local function WatchThrownFolder()
-    -- Garantir que a pasta Thrown exista
-    if not workspace:FindFirstChild("Thrown") then
-        local thrownFolder = Instance.new("Folder")
-        thrownFolder.Name = "Thrown"
-        thrownFolder.Parent = workspace
-        Print("Pasta Thrown criada")
-    end
-    
-    -- Monitorar novos objetos na pasta Thrown
-    workspace.Thrown.ChildAdded:Connect(function(child)
-        child:Destroy()
-        Print("Objeto em Thrown removido: " .. child.Name)
     end)
     
-    -- Limpar objetos existentes na pasta Thrown
-    for _, child in pairs(workspace.Thrown:GetChildren()) do
-        child:Destroy()
-    end
-    
-    Print("Monitoramento da pasta Thrown iniciado")
+    CreateNotification()
+    Print("Sistema Anti-Lag XPurple inicializado!")
 end
 
---=# Inicialização #=--
-CreateNotification()
-CreateAntiParticleSystem()
-WatchThrownFolder()
-
--- Conectar ao personagem atual e futuros
-if LocalPlayer.Character then
-    UpdateLimbs(LocalPlayer.Character)
-end
-
-LocalPlayer.CharacterAdded:Connect(function(character)
-    task.wait(1) -- Esperar um pouco para garantir que todos os membros estejam carregados
-    UpdateLimbs(character)
-end)
-
--- Loops principais de limpeza
-RunService.Heartbeat:Connect(function()
-    ProcessDebris() -- Processar a fila de detritos em cada frame
-    
-    -- Atualizar freecam se ativo
-    if freecamEnabled then
-        local moveSpeed = 1
-        local cf = Camera.CFrame
-        
-        if UserInputService:IsKeyDown(Enum.KeyCode.W) then
-            Camera.CFrame = cf + cf.LookVector * moveSpeed
-        end
-        if UserInputService:IsKeyDown(Enum.KeyCode.S) then
-            Camera.CFrame = cf - cf.LookVector * moveSpeed
-        end
-        if UserInputService:IsKeyDown(Enum.KeyCode.A) then
-            Camera.CFrame = cf - cf.RightVector * moveSpeed
-        end
-        if UserInputService:IsKeyDown(Enum.KeyCode.D) then
-            Camera.CFrame = cf + cf.RightVector * moveSpeed
-        end
-        if UserInputService:IsKeyDown(Enum.KeyCode.E) then
-            Camera.CFrame = cf + cf.UpVector * moveSpeed
-        end
-        if UserInputService:IsKeyDown(Enum.KeyCode.Q) then
-            Camera.CFrame = cf - cf.UpVector * moveSpeed
-        end
-    end
-end)
-
--- Loop de escaneamento
-task.spawn(function()
-    while true do
-        CleanGame()
-        task.wait(Settings.AntiLag.ScanInterval)
-    end
-end)
-
-Print("Sistema Anti-Lag XPurple inicializado!")
+getgenv().executed = true
