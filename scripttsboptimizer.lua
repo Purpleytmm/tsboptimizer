@@ -1,28 +1,5 @@
--- Configurações
+-- Configurações de Freecam
 local FREE_CAM_KEY = Enum.KeyCode.P -- Freecam: Shift + P
-
---[[ 
-    PROTEÇÃO TOTAL (Players/Árvores/Dummies)
---]]
-local function isProtected(obj)
-    -- Verifica se é parte de um Player
-    local player = game.Players:GetPlayerFromCharacter(obj.Parent)
-    if player then return true end
-
-    -- Verifica Dummies/NPCs e Árvores
-    local model = obj:FindFirstAncestorOfClass("Model")
-    if model then
-        return model:FindFirstChild("Humanoid") or 
-               model.Name:lower():find("tree") or 
-               model.Name:lower():find("dummy") -- Proteção para dummies
-    end
-
-    return false
-end
-
---[[ 
-    FREECAM (Shift + P) - 100% Funcional
---]]
 local camera = workspace.CurrentCamera
 local freecamActive = false
 local freecamPos, freecamCF
@@ -45,9 +22,28 @@ game:GetService("UserInputService").InputBegan:Connect(function(input, _)
     end
 end)
 
+-------------------------------------------------
+-- Sistema de Debris (Remoção Imediata)
+-------------------------------------------------
+
 --[[ 
-    SISTEMA DE DEBRIS (Remoção Imediata)
+    Proteção Total (Players/Árvores/Dummies)
 --]]
+local function isProtected(obj)
+    local player = game.Players:GetPlayerFromCharacter(obj.Parent)
+    if player then return true end
+
+    local model = obj:FindFirstAncestorOfClass("Model")
+    if model then
+        return model:FindFirstChild("Humanoid") or 
+               model.Name:lower():find("tree") or 
+               model.Name:lower():find("dummy")
+    end
+
+    return false
+end
+
+-- Remove objetos adicionados que não sejam protegidos
 workspace.DescendantAdded:Connect(function(obj)
     if obj:IsA("BasePart") and not obj.Anchored and not obj.CanCollide and not isProtected(obj) then
         if obj and obj.Destroy then
@@ -56,13 +52,9 @@ workspace.DescendantAdded:Connect(function(obj)
     end
 end)
 
---[[ 
-    LIMPEZA INICIAL
---]]
+-- Limpeza inicial de objetos não protegidos
 for _, obj in pairs(workspace:GetDescendants()) do
     if obj:IsA("BasePart") and not obj.Anchored and not obj.CanCollide and not isProtected(obj) then
         obj:Destroy()
     end
 end
-local Players = game:GetService("Players")
-local Local = Players.LocalPlayer
