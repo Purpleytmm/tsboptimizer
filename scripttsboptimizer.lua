@@ -25,6 +25,8 @@ local bodyParts = {
 }
 
 local function isProtected(obj)
+    local lowerName = obj.Name:lower()
+    
     -- Verificação RÁPIDA de personagem
     local model = obj:FindFirstAncestorOfClass("Model")
     if model and model:FindFirstChild("Humanoid") then
@@ -32,25 +34,49 @@ local function isProtected(obj)
     end
 
     -- Proteção de partes do corpo
-    if bodyParts[obj.Name:lower()] then
+    if bodyParts[lowerName] then
         return true
     end
     
     -- PERMISSÃO ESPECIAL: Meteor
-    local lowerName = obj.Name:lower()
     if lowerName:find("meteor") then
         return true
     end
 
-    -- PERMISSÃO ESPECIAL: Meteor do Frozen Soul
+    -- PERMISSÃO ESPECIAL: Frozen Soul
     if lowerName:find("frozen") and lowerName:find("soul") then
         return true
+    end
+    
+    -- PERMISSÃO ESPECIAL: Omni Directional Punch
+    -- Protege todos os objetos relacionados a esse ataque
+    if lowerName:find("omni") and lowerName:find("punch") then
+        return true
+    end
+    
+    -- Proteção adicional para debris do ODP
+    if lowerName:find("debris") then
+        -- Verifica se está dentro de um modelo relacionado ao Omni Directional Punch
+        if model and model.Name:lower():find("omni") then
+            return true
+        end
     end
 
     -- Controle MULTI-INSTÂNCIA de linhas brancas
     if lowerName == "whiteline" then
         local cutsceneModel = obj:FindFirstAncestorWhichIsA("Model")
         if cutsceneModel then
+            -- Para cutscenes de Omni Directional Punch, trate especificamente
+            if cutsceneModel.Name:lower():find("omni") then
+                registerCutscene(cutsceneModel)
+                if not cutsceneRegistry[cutsceneModel].firstLineProtected then
+                    cutsceneRegistry[cutsceneModel].firstLineProtected = true
+                    return true -- Mantém apenas a primeira linha branca
+                end
+                return false -- Remove as demais linhas
+            end
+            
+            -- Para outras cutscenes, mantém o comportamento original
             registerCutscene(cutsceneModel)
             if not cutsceneRegistry[cutsceneModel].firstLineProtected then
                 cutsceneRegistry[cutsceneModel].firstLineProtected = true
@@ -126,3 +152,4 @@ end)
 --=# Otimização Final #=--
 collectgarbage("setpause", 100)
 collectgarbage("setstepmul", 200)
+
