@@ -1,4 +1,11 @@
---=# Configurações Principais #=--
+--=# Configurações do Usuário #=--
+getgenv().Settings = {}
+Settings.Limb = {}
+Settings.Limb.Arms = true
+Settings.Limb.Legs = true
+-- Shiftlock setting completely removed
+
+--=# Configurações do Lag Reducer #=--
 local PARTS_PER_TICK = 40
 local SCAN_INTERVAL = 0.75
 local KEY_COMBO = {Enum.KeyCode.LeftShift, Enum.KeyCode.P}
@@ -6,6 +13,8 @@ local KEY_COMBO = {Enum.KeyCode.LeftShift, Enum.KeyCode.P}
 --=# Cache de Serviços #=--
 local RunService = game:GetService("RunService")
 local InputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+local Local = Players.LocalPlayer
 local workspace = workspace
 local camera = workspace.CurrentCamera
 
@@ -32,7 +41,118 @@ local effectsToRemove = {
 local queue = {}
 local pointer = 1
 
---=# Funções Otimizadas #=--
+--=# Sistema de Respawn/Refresh #=--
+if not executed then
+    function respawn(plr)
+        local char = plr.Character
+        if char:FindFirstChildOfClass("Humanoid") then char:FindFirstChildOfClass("Humanoid"):ChangeState(15) end
+        char:ClearAllChildren()
+        local newChar = Instance.new("Model")
+        newChar.Parent = workspace
+        plr.Character = newChar
+        task.wait()
+        plr.Character = char
+        newChar:Destroy()
+    end
+
+    function refresh(plr)
+        local Human = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid", true)
+        local pos = Human and Human.RootPart and Human.RootPart.CFrame
+        local pos1 = workspace.CurrentCamera.CFrame
+        respawn(plr)
+        task.spawn(function()
+            workspace.CurrentCamera.CFrame = wait() and pos1
+        end)
+    end
+
+    local old; old = hookmetamethod(game,"__namecall",function(self,...)
+        local method, args = getnamecallmethod(), {...}
+        if self.Name == "Communicate" and method == "FireServer" and args[1]["Goal"] == "Reset" then
+            task.spawn(function()
+                respawn(Local)
+            end)
+        end
+        return old(self,...)
+    end)
+
+    local old; old = hookmetamethod(game,"__newindex",function(self,k,v)
+        local char = self:FindFirstAncestorWhichIsA("Model")
+        local player = Players:GetPlayerFromCharacter(char)
+        if k == "Parent" and (v == workspace.Thrown or self:IsA("ParticleEmitter")) then
+            self:Destroy()
+            return nil
+        else
+            --print(self,k,v)
+        end
+        return old(self,k,v)
+    end)
+
+    workspace.Thrown.ChildAdded:Connect(function(instance)
+        task.wait()
+        instance:Destroy()
+    end)
+
+    function Process()
+        Local.Character:WaitForChild("HumanoidRootPart")
+        Local.Character.HumanoidRootPart.ChildAdded:Connect(function(child)
+            local Dodge = false
+            if (child.Name == "dodgevelocity") then
+                task.spawn(function()
+                    Dodge = true
+                    local Glow = Local.PlayerGui.ScreenGui.MagicHealth.Health.Glow
+                    for i = 1.975, 0, -1 do
+                        if Dodge == false then break end
+                        Glow.ImageColor3 = Color3.fromRGB(255,255,255)
+                        --print(i)
+                        task.wait(1)
+                        Glow.ImageColor3 = Color3.fromRGB(0,0,0)
+                    end
+                    Dodge = false
+                end)
+            elseif (child.Name == "moveme" or child.Name == "Sound" and Dodge) then
+                task.spawn(function()
+                    Dodge = false
+                    local Text = Local.PlayerGui.ScreenGui.MagicHealth.TextLabel
+                    for i = 3.975, 0, -1 do
+                        Text.TextColor3 = Color3.fromRGB(255,50,50)
+                        --warn(i)
+                        task.wait(1)
+                        Text.TextColor3 = Color3.fromRGB(255,255,255)
+                    end
+                end)
+            end
+        end)
+    end
+
+    Process()
+
+    Local.CharacterAdded:Connect(Process)
+
+    local UIS = game:GetService("UserInputService")
+    local Cam = game.Workspace.CurrentCamera
+
+    game:GetService("RunService").RenderStepped:Connect(function()
+        local char = Local.Character
+        if not char then return end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+        
+        if char:FindFirstChild("Left Arm") and char:FindFirstChild("Right Arm") then
+            if not Settings.Limb.Arms then
+                char:FindFirstChild("Left Arm"):Destroy()
+                char:FindFirstChild("Right Arm"):Destroy()
+            end
+            if not Settings.Limb.Legs then
+                char:FindFirstChild("Left Leg"):Destroy()
+                char:FindFirstChild("Right Leg"):Destroy()
+            end
+        end
+        
+        -- Shiftlock code completely removed
+    end)
+end
+
+--=# Funções do Lag Reducer #=--
 local function registerCutscene(cutsceneModel)
     if cutsceneModel and not cutsceneRegistry[cutsceneModel] then
         cutsceneRegistry[cutsceneModel] = {
@@ -46,22 +166,22 @@ local function registerCutscene(cutsceneModel)
     end
 end
 
--- Rastreamento global estrito para linhas brancas do Omni Punch
+-- Rastreamento global para linhas brancas do Omni Punch
 local whiteLinesAllowed = true
 workspace.DescendantAdded:Connect(function(obj)
     if obj.Name:lower() == "whiteline" then
         local model = obj:FindFirstAncestorOfClass("Model")
         if model and model.Name:lower():find("omni") then
             if not whiteLinesAllowed then
-                task.defer(function() -- Remover em task separada para evitar erros
+                task.defer(function()
                     if obj and obj.Parent then
                         obj:Destroy()
                     end
                 end)
             end
-            whiteLinesAllowed = false -- Após a primeira linha, não permite mais
+            whiteLinesAllowed = false
             
-            -- Reset automático após 5 segundos (duração típica de cutscene)
+            -- Reset após 5 segundos
             task.delay(5, function()
                 whiteLinesAllowed = true
             end)
@@ -96,17 +216,14 @@ local function isProtected(obj, lowerName, model)
         return true
     end
 
-    -- Tratamento RIGOROSO de linhas brancas (whiteline)
+    -- Tratamento de linhas brancas (whiteline)
     if lowerName == "whiteline" then
         -- Caso seja um Omni Punch, trata com regra especial global
         if model and model.Name:lower():find("omni") then
-            -- A lógica principal está no evento DescendantAdded
-            -- Apenas mantém a proteção para a primeira linha
             if not omniPunchFirstLineFlag then
                 omniPunchFirstLineFlag = true
                 
-                -- Reset após tempo para permitir futuras cutscenes
-                task.delay(7,5, function() 
+                task.delay(5, function() 
                     omniPunchFirstLineFlag = false
                 end)
                 
@@ -122,9 +239,9 @@ local function isProtected(obj, lowerName, model)
             
             if not registry.firstLineProtected then
                 registry.firstLineProtected = true
-                return true -- Primeira linha protegida
+                return true
             else
-                return false -- Linhas subsequentes removidas
+                return false
             end
         end
     end
@@ -138,7 +255,7 @@ local function isProtected(obj, lowerName, model)
         return false
     end
 
-    -- Remover partes do Omni Directional Punch (exceto a primeira linha branca)
+    -- Remover partes do Omni Directional Punch
     if lowerName:find("omni") and lowerName:find("punch") then return false end
 
     -- Verificação de debris
@@ -162,12 +279,10 @@ local function isProtected(obj, lowerName, model)
 
     -- Remover efeitos de multi-golpes
     if lowerName:find("punch") then
-        -- Remove gráficos de golpes consecutivos mas mantém hitfx normais
         if lowerName:find("multi") or lowerName:find("rapid") or lowerName:find("barrage") then
             return false
         end
         
-        -- Mantém efeitos de golpes principais
         if lowerName:find("hitfx") then
             return true
         end
@@ -183,14 +298,13 @@ local function processQueue()
     
     while pointer <= #queue and limit > 0 do
         local obj = queue[pointer]
-        if obj and obj.Parent then -- Verificar se o objeto ainda existe
+        if obj and obj.Parent then
             pcall(function() obj:Destroy() end)
         end
         pointer = pointer + 1
         limit = limit - 1
         
-        -- Prevenir congelamento em casos extremos
-        if os.clock() - start > 0.008 then -- ~8ms threshold
+        if os.clock() - start > 0.008 then
             break
         end
     end
@@ -204,9 +318,8 @@ end
 local function chunkedClean()
     local descendants = workspace:GetDescendants()
     local processingIndex = 1
-    local processingLimit = 150 -- Processa 150 objetos por frame
+    local processingLimit = 150
     
-    -- Função auxiliar para processamento incremental
     local function processChunk()
         local endIndex = math.min(processingIndex + processingLimit, #descendants)
         
@@ -226,7 +339,6 @@ local function chunkedClean()
         return processingIndex <= #descendants
     end
     
-    -- Loop de processamento em múltiplos frames
     while processChunk() do
         RunService.Heartbeat:Wait()
     end
@@ -241,7 +353,7 @@ InputService.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
---=# Inicialização de Loops #=--
+--=# Inicialização dos Sistemas #=--
 RunService.Heartbeat:Connect(processQueue)
 
 task.spawn(function()
@@ -254,3 +366,5 @@ end)
 --=# Otimização da Memória #=--
 collectgarbage("setpause", 110)
 collectgarbage("setstepmul", 200)
+
+getgenv().executed = true
