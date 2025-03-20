@@ -1,125 +1,96 @@
--- Configurações
-local CLEAN_INTERVAL = 2 -- Intervalo de limpeza (evita stutters)
-local PARTS_PER_FRAME = 2
-local FREE_CAM_KEY = Enum.KeyCode.P -- Tecla do Freecam: Shift + P
-local CUTSCENE_FOLDER_NAME = "OmniDirectionalPunchCutscene" -- Pasta com os debris da cutscene
+-- Configurações ULTRA-OTIMIZADAS
+local PARTS_PER_TICK = 3    
+local SCAN_INTERVAL = 1    
+local KEY_COMBO = {Enum.KeyCode.LeftShift, Enum.KeyCode.P}
 
--- Lista de nomes protegidos (case-insensitive)
-local PROTECTED_NAMES = {
-    tree = true, dummy = true, humanoid = true, accessory = true,
-    cape = true, aura = true, effect = true, hat = true, wings = true,
-    skin = true, flowingwatergfx = true, weakestdummy = true
-}
-
--- Função de verificação sem cache para evitar falsos positivos
+--[[ 
+    PROTEGE:
+    - Personagens (mesmo que só tenham torso/cabeça)
+    - Efeitos do Omni Punch
+    - Nomes contendo: 'punch', 'omni', 'hit', 'fx', 'gfx'
+]]
 local function isProtected(obj)
-    local character = obj:FindFirstAncestorOfClass("Model")
-    if character and game.Players:GetPlayerFromCharacter(character) then
+    -- Verificação ultra-rápida de personagem
+    local root = obj:FindFirstAncestor("HumanoidRootPart")
+    if root and root.Parent:IsA("Model") then
         return true
     end
 
-    if character and character:FindFirstChild("Humanoid") then
+    -- Verificação de nome por padrão (evita lista fixa)
+    local name = obj.Name:lower()
+    if  name:find("punch") or 
+        name:find("omni") or 
+        name:find("hit") or 
+        name:find("fx") or 
+        name:find("gfx") then
         return true
     end
 
-    if character then
-        local modelName = character.Name:lower()
-        if PROTECTED_NAMES[modelName] then
-            return true
-        end
-    end
-
-    local objName = obj.Name:lower()
-    if PROTECTED_NAMES[objName] then
-        return true
-    end
-
-    return false
-end
-
--- Fila otimizada usando ponteiro para evitar table.remove
-local debrisQueue = {}
-local queueIndex = 1
-
-local function addToQueue(obj)
-    table.insert(debrisQueue, obj)
-end
-
--- Verifica se o objeto faz parte da cutscene e, portanto, não deve ser removido
-local function isCutsceneDebris(obj)
-    local cutsceneFolder = workspace:FindFirstChild(CUTSCENE_FOLDER_NAME)
-    if cutsceneFolder and obj:IsDescendantOf(cutsceneFolder) then
-        return true
-    end
-    return false
-end
-
--- Evento que adiciona objetos à fila, se atenderem aos critérios
-workspace.DescendantAdded:Connect(function(obj)
-    if obj:IsA("BasePart") and not obj.Anchored and not obj.CanCollide then
-        if isCutsceneDebris(obj) then
-            return
-        end
-        if not isProtected(obj) then
-            addToQueue(obj)
-        end
-    end
-end)
-
-local RunService = game:GetService("RunService")
-RunService.Heartbeat:Connect(function()
-    local processed = 0
-    while processed < PARTS_PER_FRAME and queueIndex <= #debrisQueue do
-        local obj = debrisQueue[queueIndex]
-        if obj and obj.Parent then
-            pcall(function() obj:Destroy() end)
-        end
-        queueIndex = queueIndex + 1
-        processed = processed + 1
-    end
-    if queueIndex > #debrisQueue then
-        debrisQueue = {}
-        queueIndex = 1
-    end
-end)
-
--- Limpeza inicial otimizada (evita percorrer toda a árvore sem necessidade)
-local function InitialClean()
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("BasePart") and not obj.Anchored and not obj.CanCollide then
-            if isCutsceneDebris(obj) then
-                -- Pula os debris da cutscene
-            elseif not isProtected(obj) then
-                addToQueue(obj)
+    -- Proteção hierárquica rápida
+    local parent = obj.Parent
+    while parent do
+        if parent:IsA("Model") then
+            local parentName = parent.Name:lower()
+            if parentName:find("effect") or parentName:find("aura") then
+                return true
             end
         end
+        parent = parent.Parent
+    end
+    
+    return false
+end
+
+-- Sistema de fila LOW MEMORY
+local queue = {}
+local pointer = 1
+
+-- Varredura inicial otimizada para "batata"
+local function chunkedClean()
+    local descendants = workspace:GetDescendants()
+    for i = 1, #descendants, 10 do  -- Processa em blocos de 10
+        local obj = descendants[i]
+        if obj:IsA("BasePart") and not obj.Anchored and not obj.CanCollide then
+            if not isProtected(obj) then
+                queue[#queue+1] = obj
+            end
+        end
+        if i % 50 == 0 then wait() end  -- Alívio para CPUs fracas
     end
 end
 
-InitialClean()
-while task.wait(CLEAN_INTERVAL) do
-    InitialClean()
-end
-
--- Freecam (Shift + P)
-local camera = workspace.CurrentCamera
-local freecamActive = false
-local freecamPos, freecamCF
-
-local function toggleFreecam()
-    freecamActive = not freecamActive
-    if freecamActive then
-        freecamPos = camera.CFrame.Position
-        freecamCF = camera.CFrame
-        camera.CameraType = Enum.CameraType.Scriptable
-    else
-        camera.CameraType = Enum.CameraType.Custom
-        camera.CFrame = freecamCF
-    end
-end
-
-game:GetService("UserInputService").InputBegan:Connect(function(input)
-    if input.KeyCode == FREE_CAM_KEY and input:IsModifierKeyDown(Enum.ModifierKey.Shift) then
-        toggleFreecam()
+-- Processamento MÍNIMO
+game:GetService("RunService").Heartbeat:Connect(function()
+    for _ = 1, PARTS_PER_TICK do
+        if queue[pointer] then
+            pcall(function() queue[pointer]:Destroy() end)
+            pointer += 1
+        else
+            queue = {}
+            pointer = 1
+            break
+        end
     end
 end)
+
+-- Detecção low-CPU de novos objetos
+spawn(function()
+    while wait(SCAN_INTERVAL) do
+        chunkedClean()
+    end
+end)
+
+-- Freecam ULTRA SIMPLES
+local camera = workspace.CurrentCamera
+local input = game:GetService("UserInputService")
+
+input.InputBegan:Connect(function(input)
+    if input.KeyCode == KEY_COMBO[2] and input:IsModifierKeyDown(KEY_COMBO[1]) then
+        camera.CameraType = camera.CameraType == Enum.CameraType.Custom 
+            and Enum.CameraType.Scriptable 
+            or Enum.CameraType.Custom
+    end
+end)
+
+-- Inicialização leve
+spawn(chunkedClean)
