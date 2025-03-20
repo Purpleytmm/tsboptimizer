@@ -1,39 +1,43 @@
 -- Configurações
 local CLEAN_INTERVAL = 2 -- Limpeza a cada 2 segundos
-local PROTECTED_NAMES = { -- Atualize com os nomes do seu jogo!
-    "Tree", "Dummy", "Humanoid", "Accessory", 
-    "Cape", "Aura", "Effect", "Hat", "Wings", 
-    "Skin",  "WeakestDummy"
+
+-- Lista de Proteção (Players/Dummies/Árvores/Acessórios)
+local PROTECTED_NAMES = {
+    "Worn Cape", "Mahoraga Well", "Tree", "Dummy", "Humanoid", 
+    "Accessory", "Hat", "Cloak", "Aura", "Effect"
 }
 
--- Verificação Ultra-Otimizada (FIXED)
+-- Verifica se o objeto é protegido
 local function isProtected(obj)
-    -- Players: Verifica se é parte de um Model com Humanoid
-    local model = obj:FindFirstAncestorOfClass("Model")
-    if model and model:FindFirstChild("Humanoid") then
+    -- Players e Humanoids
+    if obj:FindFirstAncestorOfClass("Model") and obj:FindFirstAncestorOfClass("Humanoid") then
         return true
     end
 
-    -- Árvores e Dummies
-    if model then
-        local modelName = model.Name:lower()
-        if modelName:match("tree") or modelName:match("dummy") then
-            return true
-        end
+    -- Acessórios (capas, asas, etc.)
+    if obj:IsA("Accessory") then
+        return true
     end
 
-    -- Verificação por Nome (Acessórios)
+    -- Verifica por nome
     local name = obj.Name:lower()
     for _, keyword in pairs(PROTECTED_NAMES) do
-        if name:match(keyword:lower()) then
+        if name:find(keyword:lower()) then
             return true
         end
     end
 
+    -- Verifica ancestrais (árvores, dummies)
+    local model = obj:FindFirstAncestorOfClass("Model")
+    if model then
+        local modelName = model.Name:lower()
+        return modelName:find("tree") or modelName:find("dummy")
+    end
+    
     return false
 end
 
--- Sistema de Limpeza Direto
+-- Remove TUDO que não é protegido
 local function CleanDebris()
     for _, obj in pairs(workspace:GetDescendants()) do
         if obj:IsA("BasePart") and not obj.Anchored and not obj.CanCollide then
@@ -44,7 +48,7 @@ local function CleanDebris()
     end
 end
 
--- Loop Principal
+-- Loop principal (2 segundos)
 while task.wait(CLEAN_INTERVAL) do
     CleanDebris()
 end
