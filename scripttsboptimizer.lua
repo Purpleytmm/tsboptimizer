@@ -3,90 +3,90 @@ local CLEAN_INTERVAL = 3 -- Intervalo de limpeza (evita stutters)
 local PARTS_PER_FRAME = 5 -- Partes processadas por frame
 local FREE_CAM_KEY = Enum.KeyCode.P -- Tecla do Freecam: Shift + P
 
--- Lista de objetos protegidos (case-insensitive)
+-- Lista de nomes protegidos (case-insensitive)
 local PROTECTED_NAMES = {
     tree = true, dummy = true, humanoid = true, accessory = true,
     cape = true, aura = true, effect = true, hat = true, wings = true,
     skin = true, flowingwatergfx = true, weakestdummy = true
 }
 
--- Cache de objetos protegidos
-local protectedCache = {}
-local modelCache = {}
-
--- Verificação ultra-otimizada
+-- Função de verificação sem cache para evitar falsos positivos
 local function isProtected(obj)
-    if protectedCache[obj] ~= nil then
-        return protectedCache[obj]
-    end
-
-    -- Verifica se é parte de um Player
-    local player = game.Players:GetPlayerFromCharacter(obj.Parent)
-    if player then
-        protectedCache[obj] = true
+    -- Verifica se o objeto faz parte de um personagem
+    local character = obj:FindFirstAncestorOfClass("Model")
+    if character and game.Players:GetPlayerFromCharacter(character) then
         return true
     end
 
-    -- Verifica modelos (árvores, dummies)
-    local model = obj:FindFirstAncestorOfClass("Model")
-    if model then
-        if modelCache[model] ~= nil then
-            protectedCache[obj] = modelCache[model]
-            return modelCache[model]
-        end
+    -- Se o objeto pertencer a um modelo com Humanoid, proteja-o
+    if character and character:FindFirstChild("Humanoid") then
+        return true
+    end
 
-        if model:FindFirstChild("Humanoid") then
-            protectedCache[obj] = true
-            modelCache[model] = true
-            return true
-        end
-
-        local modelName = model.Name:lower()
+    -- Verifica se o nome do modelo está na lista de protegidos
+    if character then
+        local modelName = character.Name:lower()
         if PROTECTED_NAMES[modelName] then
-            protectedCache[obj] = true
-            modelCache[model] = true
             return true
         end
     end
 
-    -- Verifica por nome do objeto
+    -- Verifica o próprio nome do objeto
     local objName = obj.Name:lower()
-    protectedCache[obj] = PROTECTED_NAMES[objName] or false
-    return protectedCache[obj]
+    if PROTECTED_NAMES[objName] then
+        return true
+    end
+
+    return false
 end
 
--- Sistema de fila para processamento suave
+-- Fila otimizada usando ponteiro para evitar table.remove
 local debrisQueue = {}
+local queueIndex = 1
+
+local function addToQueue(obj)
+    table.insert(debrisQueue, obj)
+end
+
 workspace.DescendantAdded:Connect(function(obj)
     if obj:IsA("BasePart") and not obj.Anchored and not obj.CanCollide then
         if not isProtected(obj) then
-            debrisQueue[#debrisQueue + 1] = obj
+            addToQueue(obj)
         end
     end
 end)
 
--- Processamento leve usando Heartbeat
 game:GetService("RunService").Heartbeat:Connect(function()
-    for i = 1, math.min(PARTS_PER_FRAME, #debrisQueue) do
-        local obj = debrisQueue[1]
+    local processed = 0
+    while processed < PARTS_PER_FRAME and queueIndex <= #debrisQueue do
+        local obj = debrisQueue[queueIndex]
         if obj and obj.Parent then
-            pcall(obj.Destroy, obj)
+            pcall(function() obj:Destroy() end)
         end
-        table.remove(debrisQueue, 1)
+        queueIndex = queueIndex + 1
+        processed = processed + 1
+    end
+    -- Quando todos os itens forem processados, reinicia a fila
+    if queueIndex > #debrisQueue then
+        debrisQueue = {}
+        queueIndex = 1
     end
 end)
 
--- Limpeza inicial otimizada
+-- Limpeza inicial sem percorrer toda a árvore a cada frame
 local function InitialClean()
-    local objects = workspace:GetDescendants()
-    for i = 1, #objects do
-        local obj = objects[i]
+    for _, obj in ipairs(workspace:GetDescendants()) do
         if obj:IsA("BasePart") and not obj.Anchored and not obj.CanCollide then
             if not isProtected(obj) then
-                debrisQueue[#debrisQueue + 1] = obj
+                addToQueue(obj)
             end
         end
     end
+end
+
+InitialClean()
+while task.wait(CLEAN_INTERVAL) do
+    InitialClean()
 end
 
 -- Freecam (Shift + P)
@@ -106,15 +106,8 @@ local function toggleFreecam()
     end
 end
 
--- Ativa/desativa Freecam com Shift + P
 game:GetService("UserInputService").InputBegan:Connect(function(input)
     if input.KeyCode == FREE_CAM_KEY and input:IsModifierKeyDown(Enum.ModifierKey.Shift) then
         toggleFreecam()
     end
 end)
-
--- Loop principal
-InitialClean()
-while task.wait(CLEAN_INTERVAL) do
-    InitialClean()
-end
