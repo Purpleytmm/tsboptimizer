@@ -1,6 +1,4 @@
 -- Configurações
-local CLEAN_INTERVAL = 5 -- Segundos (performance)
-local PARTS_PER_FRAME = 5 -- Debris/frame (leve)
 local FREE_CAM_KEY = Enum.KeyCode.P -- Freecam: Shift + P
 
 --[[ 
@@ -16,9 +14,9 @@ local function isProtected(obj)
     if model then
         return model:FindFirstChild("Humanoid") or 
                model.Name:lower():find("tree") or 
-               model.Name:lower():find("dummy") -- Adicionado proteção para dummies
+               model.Name:lower():find("dummy") -- Proteção para dummies
     end
-    
+
     return false
 end
 
@@ -48,20 +46,12 @@ game:GetService("UserInputService").InputBegan:Connect(function(input, _)
 end)
 
 --[[ 
-    SISTEMA DE DEBRIS (Otimizado)
+    SISTEMA DE DEBRIS (Remoção Imediata)
 --]]
-local queue = {}
 workspace.DescendantAdded:Connect(function(obj)
     if obj:IsA("BasePart") and not obj.Anchored and not obj.CanCollide and not isProtected(obj) then
-        table.insert(queue, obj)
-    end
-end)
-
-task.spawn(function()
-    while task.wait(0.1) do
-        for i = 1, math.min(PARTS_PER_FRAME, #queue) do
-            pcall(queue[1].Destroy, queue[1])
-            table.remove(queue, 1)
+        if obj and obj.Destroy then
+            obj:Destroy()
         end
     end
 end)
