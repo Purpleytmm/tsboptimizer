@@ -1,5 +1,5 @@
 --=# Configurações Principais #=--
-local PARTS_PER_TICK = 5
+local PARTS_PER_TICK = 6
 local SCAN_INTERVAL = 2
 local KEY_COMBO = {Enum.KeyCode.LeftShift, Enum.KeyCode.P}
 
