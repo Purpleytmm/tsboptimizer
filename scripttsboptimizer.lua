@@ -1,116 +1,54 @@
---=# Configurações Principais #=--
-local PARTS_PER_TICK = 3
+-- Configurações ULTRA-OTIMIZADAS
+local PARTS_PER_TICK = 38
 local SCAN_INTERVAL = 2
 local KEY_COMBO = {Enum.KeyCode.LeftShift, Enum.KeyCode.P}
 
---=# Sistema de Registro de Cutscenes #=--
-local cutsceneRegistry = {}
-local function registerCutscene(cutsceneModel)
-    if not cutsceneRegistry[cutsceneModel] then
-        cutsceneRegistry[cutsceneModel] = {
-            firstLineProtected = false,
-            connection = cutsceneModel.AncestryChanged:Connect(function(_, parent)
-                if not parent then
-                    cutsceneRegistry[cutsceneModel] = nil
-                end
-            end)
-        }
-    end
-end
-
---=# Função de Proteção 2.0 #=--
-local bodyParts = {
-    head = true, torso = true, humanoidrootpart = true,
-    leftarm = true, rightarm = true, leftleg = true, rightleg = true
+-- Lista de EXCLUSÃO ESPECÍFICA (Efeitos para REMOVER)
+local BAN_LIST = {
+    -- Efeitos do Omni Punch Cutscene (linhas brancas)
+    ["trail"] = true, ["line_"] = true, ["slash_fx"] = true,
+    ["beam_effect"] = true, ["cutscene_line"] = true, ["whiteline"] = true,
+    
+    -- Efeitos do Flowing Water (Hero Hunter)
+    ["flowafterimage"] = true, ["waterclone"] = true, ["fadephantom"] = true,
+    ["slowfade"] = true, ["ripple_effect"] = true, ["flowfx"] = true,
+    ["ghosttrace"] = true, ["afterimage_fade"] = true
 }
 
+-- Sistema de rastreamento para primeira linha
+local firstLineProtected = false
+
 local function isProtected(obj)
-    -- Verificação RÁPIDA de personagem
-    local model = obj:FindFirstAncestorOfClass("Model")
-    if model and model:FindFirstChild("Humanoid") then
-        return true
-    end
-
-    -- Proteção de partes do corpo
-    if bodyParts[obj.Name:lower()] then
-        return true
-    end
-
-    -- Controle MULTI-INSTÂNCIA de linhas brancas
-    if obj.Name:lower() == "whiteline" then
-        local cutsceneModel = obj:FindFirstAncestorWhichIsA("Model")
-        if cutsceneModel then
-            registerCutscene(cutsceneModel)
-            if not cutsceneRegistry[cutsceneModel].firstLineProtected then
-                cutsceneRegistry[cutsceneModel].firstLineProtected = true
-                return true -- Mantém primeira linha
-            end
-            return false -- Remove linhas extras
+    -- Proteção da PRIMEIRA LINHA do Omni Punch
+    if obj.Name:lower():find("whiteline") then
+        if not firstLineProtected then
+            firstLineProtected = true
+            return true
         end
-    end
-
-    -- Filtro de efeitos indesejados
-    local lowerName = obj.Name:lower()
-    if lowerName:find("afterimage") 
-        or lowerName:find("flowingwater")
-        or lowerName:find("_trail") then
         return false
     end
 
-    -- Mantém efeitos essenciais
-    return lowerName:find("punch") or lowerName:find("hitfx")
-end
-
---=# Sistema de Limpeza Otimizado #=--
-local queue = {}
-local pointer = 1
-
-local function chunkedClean()
-    local descendants = workspace:GetDescendants()
-    for i = 1, #descendants, 15 do -- Processamento em blocos
-        local obj = descendants[i]
-        if obj:IsA("BasePart") and not obj.Anchored and not obj.CanCollide then
-            if not isProtected(obj) then
-                table.insert(queue, obj)
-            end
-        end
-        if i % 75 == 0 then task.wait() end -- Alívio de CPU
-    end
-end
-
---=# Processamento Principal #=--
-game:GetService("RunService").Heartbeat:Connect(function()
-    for _ = 1, PARTS_PER_TICK do
-        if queue[pointer] then
-            pcall(queue[pointer].Destroy, queue[pointer])
-            pointer += 1
-        else
-            table.clear(queue)
-            pointer = 1
-            break
+    -- Verificação de efeitos BANIDOS
+    local lowerName = obj.Name:lower()
+    for bannedPattern in pairs(BAN_LIST) do
+        if lowerName:find(bannedPattern) then
+            return false  -- Permite destruição
         end
     end
-end)
 
---=# Freecam ULTRA LEVE #=--
-local camera = workspace.CurrentCamera
-local input = game:GetService("UserInputService")
+    -- Proteção padrão (personagens + outros efeitos)
+    local model = obj:FindFirstAncestorOfClass("Model")
+    return (model and model:FindFirstChild("Humanoid")) 
+        or lowerName:find("punch")
+        or lowerName:find("hitfx")
+end
 
-input.InputBegan:Connect(function(input)
-    if input.KeyCode == KEY_COMBO[2] and input:IsModifierKeyDown(KEY_COMBO[1]) then
-        camera.CameraType = camera.CameraType == Enum.CameraType.Custom 
-            and Enum.CameraType.Scriptable 
-            or Enum.CameraType.Custom
+-- Sistema de limpeza OTIMIZADO (mesmo código anterior)
+-- ... (mantenha o restante do código igual da versão anterior)
+
+-- Reset da proteção da linha quando a cutscene terminar
+game:GetService("Workspace").ChildRemoved:Connect(function(child)
+    if child.Name:find("PunchCutscene") then
+        firstLineProtected = false
     end
 end)
-
---=# Execução Automática #=--
-task.spawn(function()
-    while task.wait(SCAN_INTERVAL) do
-        chunkedClean()
-    end
-end)
-
---=# Otimização Final #=--
-collectgarbage("setpause", 100)
-collectgarbage("setstepmul", 200)
