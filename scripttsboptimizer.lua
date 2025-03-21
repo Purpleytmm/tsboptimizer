@@ -13,6 +13,9 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 local canClean = true
 
+-- Sistema de fila para debris
+local debrisQueue = {}
+
 -- Helper function with direct console output
 local function Print(...)
     local message = "[XPurpleYT]: "
@@ -135,93 +138,113 @@ local function IsProtected(obj)
     return false
 end
 
--- Check if object is floating above ground (improved)
-local function IsFloatingAboveGround(part)
-    -- If it's a move/cutscene related part, don't treat as debris
-    if part:GetAttribute("CutscenePart") or part:GetAttribute("MovePart") then
+-- Melhor verificação se um objeto é realmente um debris
+local function IsDebris(part)
+    -- Verifica se é uma BasePart
+    if not part:IsA("BasePart") then
         return false
     end
     
-    -- Try to find the actual ground level by raycasting
+    -- Verificar se é parte de um personagem
+    local isCharacterPart = false
+    for _, player in pairs(Players:GetPlayers()) do
+        if player.Character and part:IsDescendantOf(player.Character) then
+            isCharacterPart = true
+            break
+        end
+    end
+    if isCharacterPart then
+        return false
+    end
+    
+    -- Não remover partes protegidas
+    if IsProtected(part) then
+        return false
+    end
+    
+    -- IMPORTANTE: Não remover partes ancoradas ou com colisão
+    if part.Anchored or part.CanCollide then
+        return false
+    end
+    
+    -- Checar se tem attachments ou outros elementos importantes
+    if part:FindFirstChildOfClass("Attachment") or 
+       part:FindFirstChildOfClass("BillboardGui") then
+        return false
+    end
+    
+    -- Verifica se está flutuando
     local rayOrigin = part.Position
-    local rayDirection = Vector3.new(0, -100, 0)
+    local rayDirection = Vector3.new(0, -10, 0) -- Verificar apenas 10 studs abaixo
     
     local raycastParams = RaycastParams.new()
     raycastParams.FilterDescendantsInstances = {part}
     raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
     
     local result = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
-    if result then
-        return (part.Position.Y - result.Position.Y) > 5
-    else
-        return true
-    end
+    
+    -- Se não atingir nada, está provavelmente flutuando
+    return result == nil
 end
 
--- Improved debris cleaning system
+-- Sistema de scan para encontrar debris
+local function ScanForDebris()
+    -- Limpar a fila de objetos que não existem mais
+    for i = #debrisQueue, 1, -1 do
+        if not debrisQueue[i] or not debrisQueue[i].Parent then
+            table.remove(debrisQueue, i)
+        end
+    end
+    
+    -- Scan workspace direto
+    for _, obj in pairs(workspace:GetChildren()) do
+        if IsDebris(obj) and not table.find(debrisQueue, obj) then
+            table.insert(debrisQueue, obj)
+        end
+    end
+    
+    -- Scan pastas comuns de debris
+    local commonFolders = {"Thrown", "Debris", "Effects", "FX"}
+    for _, folderName in ipairs(commonFolders) do
+        local folder = workspace:FindFirstChild(folderName)
+        if folder then
+            for _, obj in pairs(folder:GetChildren()) do
+                if IsDebris(obj) and not table.find(debrisQueue, obj) then
+                    table.insert(debrisQueue, obj)
+                end
+            end
+        end
+    end
+    
+    Print("Fila de debris: " .. #debrisQueue .. " itens")
+end
+
+-- Improved debris cleaning system with queue
 local function CleanGame()
     if not canClean then return end
     canClean = false
     
+    -- Primeiro, escanear por novos debris
+    ScanForDebris()
+    
+    -- Agora processar a fila, apenas removendo o número permitido por tick
     local count = 0
     local maxPartsPerTick = Settings.AntiLag.PartsPerTick
-    local debrisToClean = {}
     
-    -- Only clean unanchored parts that are likely visual effects or projectiles
-    for _, obj in pairs(workspace:GetChildren()) do
-        if obj:IsA("BasePart") then
-            -- Skip character parts
-            local isCharacterPart = false
-            for _, player in pairs(Players:GetPlayers()) do
-                if player.Character and obj:IsDescendantOf(player.Character) then
-                    isCharacterPart = true
-                    break
-                end
-            end
-            
-            -- Don't remove parts from animations or cutscenes
-            local isProtected = IsProtected(obj)
-            
-            -- Skip important animation parts
-            if obj:FindFirstChildOfClass("Attachment") or obj:FindFirstChildOfClass("BillboardGui") then
-                isProtected = true
-            end
-            
-            -- Only floating unanchored non-collision parts
-            if not isCharacterPart and not isProtected and not obj.Anchored and obj.CanCollide == false then
-                -- Only add if it's above the ground
-                pcall(function()
-                    if IsFloatingAboveGround(obj) then
-                        table.insert(debrisToClean, obj)
-                    end
-                end)
-            end
+    while count < maxPartsPerTick and #debrisQueue > 0 do
+        local part = table.remove(debrisQueue, 1)
+        
+        if part and part.Parent then
+            pcall(function() 
+                part:Destroy() 
+                count = count + 1
+            end)
         end
-    end
-    
-    -- Clean Thrown folder if it exists, respecting protections
-    local thrownFolder = workspace:FindFirstChild("Thrown")
-    if thrownFolder then
-        for _, obj in pairs(thrownFolder:GetChildren()) do
-            if not IsProtected(obj) then
-                table.insert(debrisToClean, obj)
-            end
-        end
-    end
-    
-    -- Limit the number of parts to clean per tick
-    for i = 1, math.min(#debrisToClean, maxPartsPerTick) do
-        pcall(function() 
-            if debrisToClean[i] and debrisToClean[i]:IsA("BasePart") then
-                debrisToClean[i]:Destroy() 
-            end
-        end)
-        count = count + 1
     end
     
     canClean = true
     if count > 0 then
-        Print("Removidos " .. count .. " itens de lag")
+        Print("Removidos " .. count .. " itens de lag (Fila: " .. #debrisQueue .. ")")
     end
 end
 
@@ -378,14 +401,11 @@ if not getgenv().executed then
     -- Monitor Thrown folder if it exists
     if workspace:FindFirstChild("Thrown") then
         workspace.Thrown.ChildAdded:Connect(function(instance)
-            -- Only destroy if not protected
-            if not IsProtected(instance) then
-                task.wait(0.1) -- Wait a little to make sure it's not part of a cutscene
-                pcall(function() 
-                    if instance and instance.Parent then
-                        instance:Destroy() 
-                    end
-                end)
+            task.wait(0.1) -- Pequeno delay para verificar se é parte de uma cutscene
+            
+            -- Adicionar à fila se não for protegido
+            if not IsProtected(instance) and IsDebris(instance) then
+                table.insert(debrisQueue, instance)
             end
         end)
     end
