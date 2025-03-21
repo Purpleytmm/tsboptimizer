@@ -104,18 +104,12 @@ local function IsCharacterPart(obj)
             return true
         end
     end
-    
-    local model = obj:FindFirstAncestorOfClass("Model")
-    if model and model:FindFirstChildOfClass("Humanoid") then
-        return true
-    end
-    
     return false
 end
 
 -- Verificar se o objeto está na lista de proteção
 local function IsProtected(obj)
-    local protectedNames = {"frozen", "soul", "meteor", "omni"}
+    local protectedNames = {"frozen", "soul", "meteor", "omni", "boundless", "rage"}
     local lowerName = obj.Name:lower()
     
     for _, name in ipairs(protectedNames) do
@@ -127,28 +121,14 @@ local function IsProtected(obj)
     return false
 end
 
--- Verificar se um objeto está no chão
-local function IsGrounded(part)
-    -- Verificar se há algo abaixo do objeto (raycast)
-    local rayOrigin = part.Position
-    local rayDirection = Vector3.new(0, -3, 0) -- 3 studs abaixo
-    
-    local raycastParams = RaycastParams.new()
-    raycastParams.FilterDescendantsInstances = {part}
-    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
-    
-    local result = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
-    return result ~= nil -- Se acertar algo, está no chão
-end
-
 -- Verificar se um objeto é um debris flutuante
 local function IsAirDebris(obj)
-    -- Só consideramos BaseParts
+    -- Só consideramos partes
     if not obj:IsA("BasePart") then 
         return false 
     end
     
-    -- Deve ser NÃO ancorado E SEM hitbox
+    -- Não remover partes ancoradas ou com hitbox
     if obj.Anchored or obj.CanCollide then
         return false
     end
@@ -163,12 +143,16 @@ local function IsAirDebris(obj)
         return false
     end
     
-    -- Verificar se está no ar (não no chão)
-    if IsGrounded(obj) then
-        return false
-    end
+    -- Verificar se está flutuando (não no chão)
+    local rayOrigin = obj.Position
+    local rayDirection = Vector3.new(0, -3, 0) -- 3 studs abaixo
     
-    return true
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterDescendantsInstances = {obj}
+    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+    
+    local result = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+    return result == nil -- Se não atingir nada, está flutuando
 end
 
 -- Atualizar a fila de debris
@@ -187,7 +171,7 @@ local function UpdateDebrisQueue()
         end
     end
     
-    -- Também verificar na pasta Thrown
+    -- Procurar na pasta Thrown
     if workspace:FindFirstChild("Thrown") then
         for _, obj in pairs(workspace.Thrown:GetChildren()) do
             if IsAirDebris(obj) and not table.find(debrisQueue, obj) then
@@ -197,15 +181,15 @@ local function UpdateDebrisQueue()
     end
 end
 
--- Processar a fila de debris - removendo exatamente o número definido por tick
-local function ProcessDebrisQueue()
+-- Função de limpeza que processa a fila
+local function CleanDebris()
     if not canClean then return end
     canClean = false
     
     -- Primeiro atualizar a fila
     UpdateDebrisQueue()
     
-    -- Remover exatamente o número especificado
+    -- Remover exatamente o número configurado
     local count = 0
     local maxToRemove = Settings.AntiLag.PartsPerTick
     
@@ -222,7 +206,7 @@ local function ProcessDebrisQueue()
     
     canClean = true
     if count > 0 then
-        Print("Removidos " .. count .. " debris no ar (Fila: " .. #debrisQueue .. " restantes)")
+        Print("Removidos " .. count .. " debris (Fila: " .. #debrisQueue .. " restantes)")
     end
 end
 
@@ -245,7 +229,7 @@ local function ToggleFreecam()
     end
 end
 
--- Check if this is the first run
+-- Inicialização
 if not getgenv().executed then
     Print("Initializing XPurple Anti-Lag...")
     
@@ -272,72 +256,14 @@ if not getgenv().executed then
         keysDown[input.KeyCode] = nil
     end)
     
-    -- Limb management
-    RunService.RenderStepped:Connect(function()
-        local char = LocalPlayer.Character
-        if not char then return end
-        
-        -- Só gerencia os próprios membros baseado nas configurações do usuário
-        if Settings.Limb.Arms == false then
-            local leftArm = char:FindFirstChild("Left Arm")
-            local rightArm = char:FindFirstChild("Right Arm")
-            if leftArm then leftArm.Transparency = 1 end
-            if rightArm then rightArm.Transparency = 1 end
-        end
-        
-        if Settings.Limb.Legs == false then
-            local leftLeg = char:FindFirstChild("Left Leg")
-            local rightLeg = char:FindFirstChild("Right Leg")
-            if leftLeg then leftLeg.Transparency = 1 end
-            if rightLeg then rightLeg.Transparency = 1 end
-        end
-        
-        -- Freecam controls
-        if freecamEnabled then
-            local moveSpeed = 1
-            local cf = Camera.CFrame
-            
-            if UserInputService:IsKeyDown(Enum.KeyCode.W) then
-                Camera.CFrame = cf + cf.LookVector * moveSpeed
-            end
-            if UserInputService:IsKeyDown(Enum.KeyCode.S) then
-                Camera.CFrame = cf - cf.LookVector * moveSpeed
-            end
-            if UserInputService:IsKeyDown(Enum.KeyCode.A) then
-                Camera.CFrame = cf - cf.RightVector * moveSpeed
-            end
-            if UserInputService:IsKeyDown(Enum.KeyCode.D) then
-                Camera.CFrame = cf + cf.RightVector * moveSpeed
-            end
-            if UserInputService:IsKeyDown(Enum.KeyCode.E) then
-                Camera.CFrame = cf + cf.UpVector * moveSpeed
-            end
-            if UserInputService:IsKeyDown(Enum.KeyCode.Q) then
-                Camera.CFrame = cf - cf.UpVector * moveSpeed
-            end
-        end
-    end)
-    
-    -- Iniciar loop de processamento de fila
+    -- Iniciar o loop de limpeza
     task.spawn(function()
         while wait(Settings.AntiLag.ScanInterval) do
-            ProcessDebrisQueue()
+            CleanDebris()
         end
     end)
     
-    -- Monitor Thrown folder para adicionar à fila
-    if workspace:FindFirstChild("Thrown") then
-        workspace.Thrown.ChildAdded:Connect(function(instance)
-            task.wait(0.1)
-            if instance and instance.Parent and IsAirDebris(instance) then
-                if not table.find(debrisQueue, instance) then
-                    table.insert(debrisQueue, instance)
-                end
-            end
-        end)
-    end
-    
-    -- Create notification after everything is set up
+    -- Criar notificação
     CreateNotification()
     Print("Sistema Anti-Lag XPurple inicializado!")
 end
