@@ -13,26 +13,20 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 local canClean = true
 
--- Sistema de fila para debris
-local debrisQueue = {}
-
--- Helper function with direct console output
+-- Helper function
 local function Print(...)
     local message = "[XPurpleYT]: "
     for i, v in ipairs({...}) do
         message = message .. tostring(v) .. " "
     end
-    warn(message) -- Using warn to make it more visible in console
+    warn(message)
 end
 
 -- Notification Function
 local function CreateNotification()
-    Print("Creating notification...")
-    
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "XPurpleNotification"
     
-    -- Force creation in PlayerGui if CoreGui fails
     local success = pcall(function()
         screenGui.Parent = game:GetService("CoreGui")
     end)
@@ -41,7 +35,6 @@ local function CreateNotification()
         screenGui.Parent = LocalPlayer:FindFirstChildOfClass("PlayerGui")
     end
     
-    -- Main notification frame
     local mainFrame = Instance.new("Frame")
     mainFrame.Size = UDim2.new(0, 250, 0, 70)
     mainFrame.Position = UDim2.new(1, 300, 0.8, 0)
@@ -49,12 +42,10 @@ local function CreateNotification()
     mainFrame.BorderSizePixel = 0
     mainFrame.Parent = screenGui
     
-    -- Corner rounding
     local uiCorner = Instance.new("UICorner")
     uiCorner.CornerRadius = UDim.new(0, 6)
     uiCorner.Parent = mainFrame
     
-    -- Title
     local title = Instance.new("TextLabel")
     title.Size = UDim2.new(1, -20, 0, 30)
     title.Position = UDim2.new(0, 10, 0, 5)
@@ -66,7 +57,6 @@ local function CreateNotification()
     title.TextXAlignment = Enum.TextXAlignment.Left
     title.Parent = mainFrame
     
-    -- Text
     local text = Instance.new("TextLabel")
     text.Size = UDim2.new(1, -20, 0, 20)
     text.Position = UDim2.new(0, 10, 0, 35)
@@ -78,7 +68,6 @@ local function CreateNotification()
     text.TextXAlignment = Enum.TextXAlignment.Left
     text.Parent = mainFrame
     
-    -- Animation to slide in from right
     mainFrame:TweenPosition(
         UDim2.new(1, -260, 0.8, 0),
         Enum.EasingDirection.Out,
@@ -87,7 +76,6 @@ local function CreateNotification()
         true
     )
     
-    -- Remove after delay
     task.delay(5, function()
         if mainFrame and mainFrame.Parent then
             mainFrame:TweenPosition(
@@ -104,147 +92,63 @@ local function CreateNotification()
             )
         end
     end)
-    
-    Print("Notification created")
 end
 
--- Expanded protection check function
-local function IsProtected(obj)
-    -- Protected object names (expanded list)
-    local protectedNames = {
-        "frozen", "soul", "frozensoul", "meteor", 
-        "omnidirectionalpunchcutscene", "omnidirectionalpunch", "omnidirectionalpunchfolder",
-        "final stand", "finalstand", "boundless", "rage", "boundlessrage",
-        "emote", "animate", "animation", "run", "sprint", "cutscene", "special", "attack"
-    }
-    
-    local name = obj.Name:lower()
-    for _, protectedName in ipairs(protectedNames) do
-        if string.find(name, protectedName) then
-            return true
-        end
-    end
-    
-    -- Check parent too (helps with nested cutscene objects)
-    if obj.Parent and typeof(obj.Parent) == "Instance" then
-        name = obj.Parent.Name:lower()
-        for _, protectedName in ipairs(protectedNames) do
-            if string.find(name, protectedName) then
-                return true
-            end
-        end
-    end
-    
-    return false
-end
+-- Lista de proteção simples
+local protectedNames = {
+    "frozen", "soul", "meteor", "omni"
+}
 
--- Melhor verificação se um objeto é realmente um debris
-local function IsDebris(part)
-    -- Verifica se é uma BasePart
-    if not part:IsA("BasePart") then
-        return false
-    end
-    
-    -- Verificar se é parte de um personagem
-    local isCharacterPart = false
-    for _, player in pairs(Players:GetPlayers()) do
-        if player.Character and part:IsDescendantOf(player.Character) then
-            isCharacterPart = true
-            break
-        end
-    end
-    if isCharacterPart then
-        return false
-    end
-    
-    -- Não remover partes protegidas
-    if IsProtected(part) then
-        return false
-    end
-    
-    -- IMPORTANTE: Não remover partes ancoradas ou com colisão
-    if part.Anchored or part.CanCollide then
-        return false
-    end
-    
-    -- Checar se tem attachments ou outros elementos importantes
-    if part:FindFirstChildOfClass("Attachment") or 
-       part:FindFirstChildOfClass("BillboardGui") then
-        return false
-    end
-    
-    -- Verifica se está flutuando
-    local rayOrigin = part.Position
-    local rayDirection = Vector3.new(0, -10, 0) -- Verificar apenas 10 studs abaixo
-    
-    local raycastParams = RaycastParams.new()
-    raycastParams.FilterDescendantsInstances = {part}
-    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
-    
-    local result = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
-    
-    -- Se não atingir nada, está provavelmente flutuando
-    return result == nil
-end
-
--- Sistema de scan para encontrar debris
-local function ScanForDebris()
-    -- Limpar a fila de objetos que não existem mais
-    for i = #debrisQueue, 1, -1 do
-        if not debrisQueue[i] or not debrisQueue[i].Parent then
-            table.remove(debrisQueue, i)
-        end
-    end
-    
-    -- Scan workspace direto
-    for _, obj in pairs(workspace:GetChildren()) do
-        if IsDebris(obj) and not table.find(debrisQueue, obj) then
-            table.insert(debrisQueue, obj)
-        end
-    end
-    
-    -- Scan pastas comuns de debris
-    local commonFolders = {"Thrown", "Debris", "Effects", "FX"}
-    for _, folderName in ipairs(commonFolders) do
-        local folder = workspace:FindFirstChild(folderName)
-        if folder then
-            for _, obj in pairs(folder:GetChildren()) do
-                if IsDebris(obj) and not table.find(debrisQueue, obj) then
-                    table.insert(debrisQueue, obj)
-                end
-            end
-        end
-    end
-    
-    Print("Fila de debris: " .. #debrisQueue .. " itens")
-end
-
--- Improved debris cleaning system with queue
+-- Função simplificada para limpar debris
 local function CleanGame()
     if not canClean then return end
     canClean = false
     
-    -- Primeiro, escanear por novos debris
-    ScanForDebris()
+    local debrisToClean = {}
     
-    -- Agora processar a fila, apenas removendo o número permitido por tick
+    -- Buscar partes que são debris (sem hitbox, não ancoradas)
+    for _, obj in pairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") then
+            -- Ignorar partes que são de personagens
+            local isCharacterPart = false
+            for _, player in pairs(Players:GetPlayers()) do
+                if player.Character and obj:IsDescendantOf(player.Character) then
+                    isCharacterPart = true
+                    break
+                end
+            end
+            
+            -- Verificar se nome não está na lista de proteção
+            local isProtected = false
+            local lowerName = obj.Name:lower()
+            for _, name in ipairs(protectedNames) do
+                if string.find(lowerName, name) then
+                    isProtected = true
+                    break
+                end
+            end
+            
+            -- Se não for parte de personagem, não for protegida, não for ancorada e não tiver hitbox
+            if not isCharacterPart and not isProtected and not obj.Anchored and not obj.CanCollide then
+                table.insert(debrisToClean, obj)
+            end
+        end
+    end
+    
+    -- Limitar a quantidade de partes removidas por tick
     local count = 0
-    local maxPartsPerTick = Settings.AntiLag.PartsPerTick
+    local maxToRemove = Settings.AntiLag.PartsPerTick
     
-    while count < maxPartsPerTick and #debrisQueue > 0 do
-        local part = table.remove(debrisQueue, 1)
-        
-        if part and part.Parent then
-            pcall(function() 
-                part:Destroy() 
-                count = count + 1
-            end)
+    for i = 1, math.min(#debrisToClean, maxToRemove) do
+        if debrisToClean[i] and debrisToClean[i].Parent then
+            debrisToClean[i]:Destroy()
+            count = count + 1
         end
     end
     
     canClean = true
     if count > 0 then
-        Print("Removidos " .. count .. " itens de lag (Fila: " .. #debrisQueue .. ")")
+        Print("Removidos " .. count .. " itens de lag")
     end
 end
 
@@ -301,39 +205,21 @@ if not getgenv().executed then
         
         -- Only modify limbs if the character isn't in an animation
         local humanoid = char:FindFirstChildOfClass("Humanoid")
-        if humanoid and humanoid:GetState() ~= Enum.HumanoidStateType.Running and
-           humanoid:GetState() ~= Enum.HumanoidStateType.Climbing and
-           humanoid:GetState() ~= Enum.HumanoidStateType.Jumping then
-            
-            -- Check if we can modify limbs
-            local animator = humanoid:FindFirstChildOfClass("Animator")
-            local isPlaying = false
-            
-            if animator then
-                for _, track in pairs(animator:GetPlayingAnimationTracks()) do
-                    if track.IsPlaying then
-                        isPlaying = true
-                        break
-                    end
-                end
-            end
-            
+        if humanoid and humanoid:GetState() ~= Enum.HumanoidStateType.Running then
             -- Only modify limbs if no animations are playing
-            if not isPlaying then
-                if char:FindFirstChild("Left Arm") and char:FindFirstChild("Right Arm") then
-                    if not Settings.Limb.Arms then
-                        pcall(function()
-                            char:FindFirstChild("Left Arm"):Destroy()
-                            char:FindFirstChild("Right Arm"):Destroy()
-                        end)
-                    end
-                    
-                    if not Settings.Limb.Legs then
-                        pcall(function()
-                            char:FindFirstChild("Left Leg"):Destroy()
-                            char:FindFirstChild("Right Leg"):Destroy()
-                        end)
-                    end
+            if char:FindFirstChild("Left Arm") and char:FindFirstChild("Right Arm") then
+                if not Settings.Limb.Arms then
+                    pcall(function()
+                        char:FindFirstChild("Left Arm"):Destroy()
+                        char:FindFirstChild("Right Arm"):Destroy()
+                    end)
+                end
+                
+                if not Settings.Limb.Legs then
+                    pcall(function()
+                        char:FindFirstChild("Left Leg"):Destroy()
+                        char:FindFirstChild("Right Leg"):Destroy()
+                    end)
                 end
             end
         end
@@ -366,25 +252,14 @@ if not getgenv().executed then
     
     -- Fix running/emotes when character spawns
     LocalPlayer.CharacterAdded:Connect(function(char)
-        -- Wait for character to be fully loaded
         local humanoid = char:WaitForChild("Humanoid", 10)
         if humanoid then
-            -- Make sure animation scripts are not interfered with
             local animate = char:WaitForChild("Animate", 10)
             if animate then
-                -- Wait for all animation scripts to load
                 wait(1)
-                
-                -- Fix run animations if needed
                 local runScript = animate:FindFirstChild("run")
                 if runScript then
                     runScript.Disabled = false
-                end
-                
-                -- Fix emote animations if needed
-                local emoteScript = char:FindFirstChild("EmoteScript") or animate:FindFirstChild("emote")
-                if emoteScript then
-                    emoteScript.Disabled = false
                 end
             end
         end
@@ -397,18 +272,6 @@ if not getgenv().executed then
             task.wait(Settings.AntiLag.ScanInterval)
         end
     end)
-    
-    -- Monitor Thrown folder if it exists
-    if workspace:FindFirstChild("Thrown") then
-        workspace.Thrown.ChildAdded:Connect(function(instance)
-            task.wait(0.1) -- Pequeno delay para verificar se é parte de uma cutscene
-            
-            -- Adicionar à fila se não for protegido
-            if not IsProtected(instance) and IsDebris(instance) then
-                table.insert(debrisQueue, instance)
-            end
-        end)
-    end
     
     -- Create notification after everything is set up
     CreateNotification()
