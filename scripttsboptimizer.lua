@@ -11,9 +11,6 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
-local canClean = true
-
--- Fila para debris a serem removidos
 local debrisQueue = {}
 
 -- Debug function
@@ -97,115 +94,86 @@ local function CreateNotification()
     end)
 end
 
--- Verificar se objeto é parte de um personagem
-local function IsCharacterPart(obj)
+-- FUNÇÃO SUPER SIMPLES: Verificar se objeto é debris
+local function IsDebris(obj)
+    -- Não é uma BasePart? Ignorar
+    if not obj:IsA("BasePart") then return false end
+    
+    -- É parte de personagem? Ignorar
     for _, player in pairs(Players:GetPlayers()) do
         if player.Character and obj:IsDescendantOf(player.Character) then
-            return true
+            return false
         end
     end
     
+    -- É um modelo com Humanoid? Ignorar
     local model = obj:FindFirstAncestorOfClass("Model")
     if model and model:FindFirstChildOfClass("Humanoid") then
+        return false
+    end
+    
+    -- Tem nome protegido? Ignorar
+    local protectedNames = {"frozen", "soul", "meteor", "omni"}
+    local lowerName = obj.Name:lower()
+    for _, name in ipairs(protectedNames) do
+        if string.find(lowerName, name) then
+            return false
+        end
+    end
+    
+    -- Se NÃO é ancorado E NÃO tem colisão, é um debris
+    if not obj.Anchored and not obj.CanCollide then
         return true
     end
     
     return false
 end
 
--- Verificar se o objeto está na lista de proteção
-local function IsProtected(obj)
-    local protectedNames = {"frozen", "soul", "meteor", "omni"}
-    local lowerName = obj.Name:lower()
-    
-    for _, name in ipairs(protectedNames) do
-        if string.find(lowerName, name) then
-            return true
-        end
-    end
-    
-    return false
-end
-
--- Verificar se um objeto está no chão
-local function IsGrounded(part)
-    -- Verificar se há algo abaixo do objeto (raycast)
-    local rayOrigin = part.Position
-    local rayDirection = Vector3.new(0, -3, 0) -- 3 studs abaixo
-    
-    local raycastParams = RaycastParams.new()
-    raycastParams.FilterDescendantsInstances = {part}
-    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
-    
-    local result = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
-    return result ~= nil -- Se acertar algo, está no chão
-end
-
--- Verificar se um objeto é um debris flutuante
-local function IsAirDebris(obj)
-    -- Só consideramos BaseParts
-    if not obj:IsA("BasePart") then 
-        return false 
-    end
-    
-    -- Deve ser NÃO ancorado E SEM hitbox
-    if obj.Anchored or obj.CanCollide then
-        return false
-    end
-    
-    -- Não remover partes de personagens
-    if IsCharacterPart(obj) then
-        return false
-    end
-    
-    -- Não remover objetos protegidos
-    if IsProtected(obj) then
-        return false
-    end
-    
-    -- Verificar se está no ar (não no chão)
-    if IsGrounded(obj) then
-        return false
-    end
-    
-    return true
-end
-
--- Atualizar a fila de debris
-local function UpdateDebrisQueue()
-    -- Limpar entradas inválidas
+-- Scan do jogo para encontrar debris
+local function ScanForDebris()
+    -- Limpar objetos não existentes da fila
     for i = #debrisQueue, 1, -1 do
         if not debrisQueue[i] or not debrisQueue[i].Parent then
             table.remove(debrisQueue, i)
         end
     end
     
-    -- Buscar no workspace
+    -- Procurar por novos debris no workspace
     for _, obj in pairs(workspace:GetChildren()) do
-        if IsAirDebris(obj) and not table.find(debrisQueue, obj) then
+        if IsDebris(obj) and not table.find(debrisQueue, obj) then
             table.insert(debrisQueue, obj)
         end
     end
     
-    -- Também verificar na pasta Thrown
+    -- Procurar na pasta Thrown
     if workspace:FindFirstChild("Thrown") then
         for _, obj in pairs(workspace.Thrown:GetChildren()) do
-            if IsAirDebris(obj) and not table.find(debrisQueue, obj) then
+            if not table.find(debrisQueue, obj) then
                 table.insert(debrisQueue, obj)
+            end
+        end
+    end
+    
+    -- Procurar por objetos específicos (partes de efeitos)
+    for _, obj in pairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") and not obj.Anchored and not obj.CanCollide then
+            local name = obj.Name:lower()
+            if string.find(name, "effect") or string.find(name, "particle") or 
+               string.find(name, "debris") or string.find(name, "fx") then
+                if not table.find(debrisQueue, obj) then
+                    table.insert(debrisQueue, obj)
+                end
             end
         end
     end
 end
 
--- Processar a fila de debris - removendo exatamente o número definido por tick
-local function ProcessDebrisQueue()
-    if not canClean then return end
-    canClean = false
-    
+-- Função de limpeza que processa a fila
+local function CleanDebris()
     -- Primeiro atualizar a fila
-    UpdateDebrisQueue()
+    ScanForDebris()
     
-    -- Remover exatamente o número especificado
+    -- Agora processá-la, removendo exatamente o número configurado
     local count = 0
     local maxToRemove = Settings.AntiLag.PartsPerTick
     
@@ -220,9 +188,8 @@ local function ProcessDebrisQueue()
         end
     end
     
-    canClean = true
     if count > 0 then
-        Print("Removidos " .. count .. " debris no ar (Fila: " .. #debrisQueue .. " restantes)")
+        Print("Removidos " .. count .. " debris (Fila: " .. #debrisQueue .. " restantes)")
     end
 end
 
@@ -245,7 +212,7 @@ local function ToggleFreecam()
     end
 end
 
--- Check if this is the first run
+-- Inicialização
 if not getgenv().executed then
     Print("Initializing XPurple Anti-Lag...")
     
@@ -318,18 +285,22 @@ if not getgenv().executed then
         end
     end)
     
-    -- Iniciar loop de processamento de fila
+    -- Iniciar o loop de limpeza
     task.spawn(function()
-        while wait(Settings.AntiLag.ScanInterval) do
-            ProcessDebrisQueue()
+        -- Primeira limpeza após 3 segundos
+        wait(3)
+        
+        while true do
+            CleanDebris()
+            wait(Settings.AntiLag.ScanInterval)
         end
     end)
     
-    -- Monitor Thrown folder para adicionar à fila
+    -- Monitor para pasta Thrown
     if workspace:FindFirstChild("Thrown") then
         workspace.Thrown.ChildAdded:Connect(function(instance)
-            task.wait(0.1)
-            if instance and instance.Parent and IsAirDebris(instance) then
+            wait(0.1)
+            if instance and instance.Parent then
                 if not table.find(debrisQueue, instance) then
                     table.insert(debrisQueue, instance)
                 end
@@ -337,7 +308,7 @@ if not getgenv().executed then
         end)
     end
     
-    -- Create notification after everything is set up
+    -- Criar notificação
     CreateNotification()
     Print("Sistema Anti-Lag XPurple inicializado!")
 end
