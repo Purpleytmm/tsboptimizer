@@ -1,7 +1,7 @@
 -- Global Settings
 getgenv().Settings = {
     Limb = { Arms = true, Legs = true },
-    AntiLag = { PartsPerTick = 38, ScanInterval = 2 },
+    AntiLag = { PartsPerTick = 40, ScanInterval = 2 },
     FreecamKey = {Enum.KeyCode.LeftShift, Enum.KeyCode.P}
 }
 
@@ -13,7 +13,7 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 local canClean = true
 
--- Sistema de fila para remoção gradual
+-- Fila para debris a serem removidos
 local debrisQueue = {}
 
 -- Debug function
@@ -99,14 +99,12 @@ end
 
 -- Verificar se objeto é parte de um personagem
 local function IsCharacterPart(obj)
-    -- Verificar se o objeto está em um personagem de jogador
     for _, player in pairs(Players:GetPlayers()) do
         if player.Character and obj:IsDescendantOf(player.Character) then
             return true
         end
     end
     
-    -- Verificar se o objeto está em um modelo com Humanoid
     local model = obj:FindFirstAncestorOfClass("Model")
     if model and model:FindFirstChildOfClass("Humanoid") then
         return true
@@ -115,44 +113,42 @@ local function IsCharacterPart(obj)
     return false
 end
 
--- Lista de proteção expandida
-local protectedNames = {
-    "frozen", "soul", "meteor", "omni", "boundless", "rage", "final", "stand"
-}
-
--- Tempo especial para debris do Omni (30 segundos)
-local omniDebrisTime = 20
-
--- Função para verificar se um objeto está protegido pelo nome
+-- Verificar se o objeto está na lista de proteção
 local function IsProtected(obj)
+    local protectedNames = {"frozen", "soul", "meteor", "omni"}
     local lowerName = obj.Name:lower()
+    
     for _, name in ipairs(protectedNames) do
         if string.find(lowerName, name) then
             return true
         end
     end
     
-    -- Verificar parent também
-    if obj.Parent then
-        local parentName = obj.Parent.Name:lower()
-        for _, name in ipairs(protectedNames) do
-            if string.find(parentName, name) then
-                return true
-            end
-        end
-    end
-    
     return false
 end
 
--- Verifica se um objeto é um debris que deve ser removido
-local function IsDebris(obj)
-    -- Só consideramos partes
+-- Verificar se um objeto está no chão
+local function IsGrounded(part)
+    -- Verificar se há algo abaixo do objeto (raycast)
+    local rayOrigin = part.Position
+    local rayDirection = Vector3.new(0, -3, 0) -- 3 studs abaixo
+    
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterDescendantsInstances = {part}
+    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+    
+    local result = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+    return result ~= nil -- Se acertar algo, está no chão
+end
+
+-- Verificar se um objeto é um debris flutuante
+local function IsAirDebris(obj)
+    -- Só consideramos BaseParts
     if not obj:IsA("BasePart") then 
         return false 
     end
     
-    -- Não remover partes ancoradas ou com hitbox
+    -- Deve ser NÃO ancorado E SEM hitbox
     if obj.Anchored or obj.CanCollide then
         return false
     end
@@ -167,54 +163,41 @@ local function IsDebris(obj)
         return false
     end
     
+    -- Verificar se está no ar (não no chão)
+    if IsGrounded(obj) then
+        return false
+    end
+    
     return true
 end
 
--- Função para escanear e atualizar a fila de debris
+-- Atualizar a fila de debris
 local function UpdateDebrisQueue()
-    -- Remover objetos inválidos da fila
+    -- Limpar entradas inválidas
     for i = #debrisQueue, 1, -1 do
         if not debrisQueue[i] or not debrisQueue[i].Parent then
             table.remove(debrisQueue, i)
         end
     end
     
-    -- Adicionar novos debris à fila
+    -- Buscar no workspace
     for _, obj in pairs(workspace:GetChildren()) do
-        if IsDebris(obj) and not table.find(debrisQueue, obj) then
+        if IsAirDebris(obj) and not table.find(debrisQueue, obj) then
             table.insert(debrisQueue, obj)
         end
     end
     
-    -- Checar pasta Thrown
+    -- Também verificar na pasta Thrown
     if workspace:FindFirstChild("Thrown") then
         for _, obj in pairs(workspace.Thrown:GetChildren()) do
-            if not IsProtected(obj) and not table.find(debrisQueue, obj) then
+            if IsAirDebris(obj) and not table.find(debrisQueue, obj) then
                 table.insert(debrisQueue, obj)
-            end
-        end
-    end
-    
-    -- Verificar debris do Omni especificamente - remover após 30 segundos
-    for _, obj in pairs(workspace:GetDescendants()) do
-        local name = obj.Name:lower()
-        if (string.find(name, "omni") or string.find(name, "punch")) and 
-           obj:IsA("BasePart") and not obj.Anchored and not obj.CanCollide then
-            
-            -- Marcar para remoção após o tempo
-            if not obj:GetAttribute("OmniCleanTime") then
-                obj:SetAttribute("OmniCleanTime", tick() + omniDebrisTime)
-            elseif tick() > obj:GetAttribute("OmniCleanTime") then
-                -- Tempo expirou, adicionar à fila se ainda não estiver lá
-                if not table.find(debrisQueue, obj) then
-                    table.insert(debrisQueue, obj)
-                end
             end
         end
     end
 end
 
--- Função de limpeza de debris da fila
+-- Processar a fila de debris - removendo exatamente o número definido por tick
 local function ProcessDebrisQueue()
     if not canClean then return end
     canClean = false
@@ -222,11 +205,11 @@ local function ProcessDebrisQueue()
     -- Primeiro atualizar a fila
     UpdateDebrisQueue()
     
-    -- Processar a fila, removendo até X elementos por vez
+    -- Remover exatamente o número especificado
     local count = 0
     local maxToRemove = Settings.AntiLag.PartsPerTick
     
-    while count < maxToRemove and #debrisQueue > 0 do
+    for i = 1, math.min(#debrisQueue, maxToRemove) do
         local debris = table.remove(debrisQueue, 1)
         
         if debris and debris.Parent then
@@ -239,7 +222,7 @@ local function ProcessDebrisQueue()
     
     canClean = true
     if count > 0 then
-        Print("Removidos " .. count .. " itens de lag (Fila: " .. #debrisQueue .. " restantes)")
+        Print("Removidos " .. count .. " debris no ar (Fila: " .. #debrisQueue .. " restantes)")
     end
 end
 
@@ -335,38 +318,24 @@ if not getgenv().executed then
         end
     end)
     
-    -- Start queue processing loop
+    -- Iniciar loop de processamento de fila
     task.spawn(function()
         while wait(Settings.AntiLag.ScanInterval) do
             ProcessDebrisQueue()
         end
     end)
     
-    -- Monitor Thrown folder para adicionar itens à fila
+    -- Monitor Thrown folder para adicionar à fila
     if workspace:FindFirstChild("Thrown") then
         workspace.Thrown.ChildAdded:Connect(function(instance)
             task.wait(0.1)
-            if instance and instance.Parent and not IsProtected(instance) then
+            if instance and instance.Parent and IsAirDebris(instance) then
                 if not table.find(debrisQueue, instance) then
                     table.insert(debrisQueue, instance)
                 end
             end
         end)
     end
-    
-    -- Monitoramento especial para debris do Omni Directional Punch
-    workspace.DescendantAdded:Connect(function(obj)
-        if obj:IsA("BasePart") then
-            local name = obj.Name:lower()
-            if string.find(name, "omni") or string.find(name, "punch") then
-                -- Se for debris do Omni, marca para remoção após 30 segundos
-                if not obj.Anchored and not obj.CanCollide and not IsCharacterPart(obj) then
-                    obj:SetAttribute("OmniCleanTime", tick() + omniDebrisTime)
-                    -- Será verificado na próxima atualização da fila
-                end
-            end
-        end
-    end)
     
     -- Create notification after everything is set up
     CreateNotification()
