@@ -22,7 +22,7 @@ local function Print(...)
     warn(message) -- Using warn to make it more visible in console
 end
 
--- Notification Function (EXACTLY as in original, but forced to work)
+-- Notification Function
 local function CreateNotification()
     Print("Creating notification...")
     
@@ -105,14 +105,69 @@ local function CreateNotification()
     Print("Notification created")
 end
 
--- FIXED Debris Cleaning System that will definitely work
+-- Expanded protection check function
+local function IsProtected(obj)
+    -- Protected object names (expanded list)
+    local protectedNames = {
+        "frozen", "soul", "frozensoul", "meteor", 
+        "omnidirectionalpunchcutscene", "omnidirectionalpunch", "omnidirectionalpunchfolder",
+        "final stand", "finalstand", "boundless", "rage", "boundlessrage",
+        "emote", "animate", "animation", "run", "sprint", "cutscene", "special", "attack"
+    }
+    
+    local name = obj.Name:lower()
+    for _, protectedName in ipairs(protectedNames) do
+        if string.find(name, protectedName) then
+            return true
+        end
+    end
+    
+    -- Check parent too (helps with nested cutscene objects)
+    if obj.Parent and typeof(obj.Parent) == "Instance" then
+        name = obj.Parent.Name:lower()
+        for _, protectedName in ipairs(protectedNames) do
+            if string.find(name, protectedName) then
+                return true
+            end
+        end
+    end
+    
+    return false
+end
+
+-- Check if object is floating above ground (improved)
+local function IsFloatingAboveGround(part)
+    -- If it's a move/cutscene related part, don't treat as debris
+    if part:GetAttribute("CutscenePart") or part:GetAttribute("MovePart") then
+        return false
+    end
+    
+    -- Try to find the actual ground level by raycasting
+    local rayOrigin = part.Position
+    local rayDirection = Vector3.new(0, -100, 0)
+    
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterDescendantsInstances = {part}
+    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+    
+    local result = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+    if result then
+        return (part.Position.Y - result.Position.Y) > 5
+    else
+        return true
+    end
+end
+
+-- Improved debris cleaning system
 local function CleanGame()
     if not canClean then return end
     canClean = false
     
     local count = 0
+    local maxPartsPerTick = Settings.AntiLag.PartsPerTick
+    local debrisToClean = {}
     
-    -- Extra aggressive cleaning of potential lag objects
+    -- Only clean unanchored parts that are likely visual effects or projectiles
     for _, obj in pairs(workspace:GetChildren()) do
         if obj:IsA("BasePart") then
             -- Skip character parts
@@ -124,28 +179,44 @@ local function CleanGame()
                 end
             end
             
-            -- If not anchored and not a character part, it's probably debris
-            if not isCharacterPart and not obj.Anchored and obj.CanCollide == false then
-                pcall(function() obj:Destroy() end)
-                count = count + 1
+            -- Don't remove parts from animations or cutscenes
+            local isProtected = IsProtected(obj)
+            
+            -- Skip important animation parts
+            if obj:FindFirstChildOfClass("Attachment") or obj:FindFirstChildOfClass("BillboardGui") then
+                isProtected = true
+            end
+            
+            -- Only floating unanchored non-collision parts
+            if not isCharacterPart and not isProtected and not obj.Anchored and obj.CanCollide == false then
+                -- Only add if it's above the ground
+                pcall(function()
+                    if IsFloatingAboveGround(obj) then
+                        table.insert(debrisToClean, obj)
+                    end
+                end)
             end
         end
     end
     
-    -- Clean Thrown folder if it exists (common for projectiles)
-    if workspace:FindFirstChild("Thrown") then
-        for _, obj in pairs(workspace.Thrown:GetChildren()) do
-            pcall(function() obj:Destroy() end)
-            count = count + 1
+    -- Clean Thrown folder if it exists, respecting protections
+    local thrownFolder = workspace:FindFirstChild("Thrown")
+    if thrownFolder then
+        for _, obj in pairs(thrownFolder:GetChildren()) do
+            if not IsProtected(obj) then
+                table.insert(debrisToClean, obj)
+            end
         end
     end
     
-    -- Clean Debris folder if it exists
-    if workspace:FindFirstChild("Debris") then
-        for _, obj in pairs(workspace.Debris:GetChildren()) do
-            pcall(function() obj:Destroy() end)
-            count = count + 1
-        end
+    -- Limit the number of parts to clean per tick
+    for i = 1, math.min(#debrisToClean, maxPartsPerTick) do
+        pcall(function() 
+            if debrisToClean[i] and debrisToClean[i]:IsA("BasePart") then
+                debrisToClean[i]:Destroy() 
+            end
+        end)
+        count = count + 1
     end
     
     canClean = true
@@ -200,25 +271,47 @@ if not getgenv().executed then
         keysDown[input.KeyCode] = nil
     end)
     
-    -- Limb management
+    -- Limb management - MODIFIED: don't interfere with animations
     RunService.RenderStepped:Connect(function()
         local char = LocalPlayer.Character
         if not char then return end
         
-        -- Manage limbs
-        if char:FindFirstChild("Left Arm") and char:FindFirstChild("Right Arm") then
-            if not Settings.Limb.Arms then
-                pcall(function()
-                    char:FindFirstChild("Left Arm"):Destroy()
-                    char:FindFirstChild("Right Arm"):Destroy()
-                end)
+        -- Only modify limbs if the character isn't in an animation
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        if humanoid and humanoid:GetState() ~= Enum.HumanoidStateType.Running and
+           humanoid:GetState() ~= Enum.HumanoidStateType.Climbing and
+           humanoid:GetState() ~= Enum.HumanoidStateType.Jumping then
+            
+            -- Check if we can modify limbs
+            local animator = humanoid:FindFirstChildOfClass("Animator")
+            local isPlaying = false
+            
+            if animator then
+                for _, track in pairs(animator:GetPlayingAnimationTracks()) do
+                    if track.IsPlaying then
+                        isPlaying = true
+                        break
+                    end
+                end
             end
             
-            if not Settings.Limb.Legs then
-                pcall(function()
-                    char:FindFirstChild("Left Leg"):Destroy()
-                    char:FindFirstChild("Right Leg"):Destroy()
-                end)
+            -- Only modify limbs if no animations are playing
+            if not isPlaying then
+                if char:FindFirstChild("Left Arm") and char:FindFirstChild("Right Arm") then
+                    if not Settings.Limb.Arms then
+                        pcall(function()
+                            char:FindFirstChild("Left Arm"):Destroy()
+                            char:FindFirstChild("Right Arm"):Destroy()
+                        end)
+                    end
+                    
+                    if not Settings.Limb.Legs then
+                        pcall(function()
+                            char:FindFirstChild("Left Leg"):Destroy()
+                            char:FindFirstChild("Right Leg"):Destroy()
+                        end)
+                    end
+                end
             end
         end
         
@@ -248,6 +341,32 @@ if not getgenv().executed then
         end
     end)
     
+    -- Fix running/emotes when character spawns
+    LocalPlayer.CharacterAdded:Connect(function(char)
+        -- Wait for character to be fully loaded
+        local humanoid = char:WaitForChild("Humanoid", 10)
+        if humanoid then
+            -- Make sure animation scripts are not interfered with
+            local animate = char:WaitForChild("Animate", 10)
+            if animate then
+                -- Wait for all animation scripts to load
+                wait(1)
+                
+                -- Fix run animations if needed
+                local runScript = animate:FindFirstChild("run")
+                if runScript then
+                    runScript.Disabled = false
+                end
+                
+                -- Fix emote animations if needed
+                local emoteScript = char:FindFirstChild("EmoteScript") or animate:FindFirstChild("emote")
+                if emoteScript then
+                    emoteScript.Disabled = false
+                end
+            end
+        end
+    end)
+    
     -- Start cleanup loop
     task.spawn(function()
         while true do
@@ -259,8 +378,15 @@ if not getgenv().executed then
     -- Monitor Thrown folder if it exists
     if workspace:FindFirstChild("Thrown") then
         workspace.Thrown.ChildAdded:Connect(function(instance)
-            task.wait()
-            pcall(function() instance:Destroy() end)
+            -- Only destroy if not protected
+            if not IsProtected(instance) then
+                task.wait(0.1) -- Wait a little to make sure it's not part of a cutscene
+                pcall(function() 
+                    if instance and instance.Parent then
+                        instance:Destroy() 
+                    end
+                end)
+            end
         end)
     end
     
