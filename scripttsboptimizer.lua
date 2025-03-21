@@ -13,7 +13,7 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 local canClean = true
 
--- Helper function
+-- Debug function
 local function Print(...)
     local message = "[XPurpleYT]: "
     for i, v in ipairs({...}) do
@@ -94,42 +94,83 @@ local function CreateNotification()
     end)
 end
 
--- Lista de proteção simples
+-- MELHORADO: Verificar se objeto é parte de um personagem
+local function IsCharacterPart(obj)
+    -- Método 1: Verificar se o objeto está em um personagem de jogador
+    for _, player in pairs(Players:GetPlayers()) do
+        if player.Character and obj:IsDescendantOf(player.Character) then
+            return true
+        end
+        
+        -- Também verificar se o objeto É um membro (Arms/Legs)
+        if obj.Name == "Left Arm" or obj.Name == "Right Arm" or
+           obj.Name == "Left Leg" or obj.Name == "Right Leg" or
+           obj.Name == "Torso" or obj.Name == "Head" or 
+           obj.Name == "HumanoidRootPart" then
+            return true
+        end
+    end
+    
+    -- Método 2: Verificar se o objeto está em um modelo com Humanoid
+    local parent = obj.Parent
+    if parent and parent:IsA("Model") and parent:FindFirstChildOfClass("Humanoid") then
+        return true
+    end
+    
+    -- Método 3: Buscar o modelo ancestral
+    local model = obj:FindFirstAncestorOfClass("Model")
+    if model and model:FindFirstChildOfClass("Humanoid") then
+        return true
+    end
+    
+    return false
+end
+
+-- Lista de proteção
 local protectedNames = {
-    "frozen", "soul", "meteor", "omni"
+    "frozen", "soul", "meteor", "omni", "boundless", "rage"
 }
 
--- Função simplificada para limpar debris
+-- Função para verificar se um objeto está protegido pelo nome
+local function IsProtected(obj)
+    local lowerName = obj.Name:lower()
+    for _, name in ipairs(protectedNames) do
+        if string.find(lowerName, name) then
+            return true
+        end
+    end
+    return false
+end
+
+-- CORRIGIDO: Função de limpeza de debris
 local function CleanGame()
     if not canClean then return end
     canClean = false
     
     local debrisToClean = {}
     
-    -- Buscar partes que são debris (sem hitbox, não ancoradas)
-    for _, obj in pairs(workspace:GetDescendants()) do
-        if obj:IsA("BasePart") then
-            -- Ignorar partes que são de personagens
-            local isCharacterPart = false
-            for _, player in pairs(Players:GetPlayers()) do
-                if player.Character and obj:IsDescendantOf(player.Character) then
-                    isCharacterPart = true
-                    break
-                end
+    -- Abordagem 1: Verificar no workspace
+    for _, obj in pairs(workspace:GetChildren()) do
+        if obj:IsA("BasePart") and not obj.Anchored and not obj.CanCollide then
+            if not IsCharacterPart(obj) and not IsProtected(obj) then
+                table.insert(debrisToClean, obj)
             end
-            
-            -- Verificar se nome não está na lista de proteção
-            local isProtected = false
-            local lowerName = obj.Name:lower()
-            for _, name in ipairs(protectedNames) do
-                if string.find(lowerName, name) then
-                    isProtected = true
-                    break
-                end
+        end
+    end
+    
+    -- Abordagem 2: Verificar na pasta Thrown (comum para debris)
+    if workspace:FindFirstChild("Thrown") then
+        for _, obj in pairs(workspace.Thrown:GetChildren()) do
+            if not IsProtected(obj) then
+                table.insert(debrisToClean, obj)
             end
-            
-            -- Se não for parte de personagem, não for protegida, não for ancorada e não tiver hitbox
-            if not isCharacterPart and not isProtected and not obj.Anchored and not obj.CanCollide then
+        end
+    end
+    
+    -- Abordagem 3: Verificar na pasta Debris (se existir)
+    if workspace:FindFirstChild("Debris") then
+        for _, obj in pairs(workspace.Debris:GetChildren()) do
+            if not IsProtected(obj) then
                 table.insert(debrisToClean, obj)
             end
         end
@@ -141,8 +182,10 @@ local function CleanGame()
     
     for i = 1, math.min(#debrisToClean, maxToRemove) do
         if debrisToClean[i] and debrisToClean[i].Parent then
-            debrisToClean[i]:Destroy()
-            count = count + 1
+            pcall(function()
+                debrisToClean[i]:Destroy()
+                count = count + 1
+            end)
         end
     end
     
@@ -198,30 +241,25 @@ if not getgenv().executed then
         keysDown[input.KeyCode] = nil
     end)
     
-    -- Limb management - MODIFIED: don't interfere with animations
+    -- CORRIGIDO: Não mais remove partes de personagens automaticamente
+    -- Apenas gerencia os braços/pernas se a configuração estiver desabilitada
     RunService.RenderStepped:Connect(function()
         local char = LocalPlayer.Character
         if not char then return end
         
-        -- Only modify limbs if the character isn't in an animation
-        local humanoid = char:FindFirstChildOfClass("Humanoid")
-        if humanoid and humanoid:GetState() ~= Enum.HumanoidStateType.Running then
-            -- Only modify limbs if no animations are playing
-            if char:FindFirstChild("Left Arm") and char:FindFirstChild("Right Arm") then
-                if not Settings.Limb.Arms then
-                    pcall(function()
-                        char:FindFirstChild("Left Arm"):Destroy()
-                        char:FindFirstChild("Right Arm"):Destroy()
-                    end)
-                end
-                
-                if not Settings.Limb.Legs then
-                    pcall(function()
-                        char:FindFirstChild("Left Leg"):Destroy()
-                        char:FindFirstChild("Right Leg"):Destroy()
-                    end)
-                end
-            end
+        -- Só gerencia os próprios membros baseado nas configurações do usuário
+        if Settings.Limb.Arms == false then
+            local leftArm = char:FindFirstChild("Left Arm")
+            local rightArm = char:FindFirstChild("Right Arm")
+            if leftArm then leftArm.Transparency = 1 end
+            if rightArm then rightArm.Transparency = 1 end
+        end
+        
+        if Settings.Limb.Legs == false then
+            local leftLeg = char:FindFirstChild("Left Leg")
+            local rightLeg = char:FindFirstChild("Right Leg")
+            if leftLeg then leftLeg.Transparency = 1 end
+            if rightLeg then rightLeg.Transparency = 1 end
         end
         
         -- Freecam controls
@@ -250,28 +288,23 @@ if not getgenv().executed then
         end
     end)
     
-    -- Fix running/emotes when character spawns
-    LocalPlayer.CharacterAdded:Connect(function(char)
-        local humanoid = char:WaitForChild("Humanoid", 10)
-        if humanoid then
-            local animate = char:WaitForChild("Animate", 10)
-            if animate then
-                wait(1)
-                local runScript = animate:FindFirstChild("run")
-                if runScript then
-                    runScript.Disabled = false
-                end
-            end
+    -- Start cleanup loop
+    task.spawn(function()
+        while wait(Settings.AntiLag.ScanInterval) do
+            CleanGame()
         end
     end)
     
-    -- Start cleanup loop
-    task.spawn(function()
-        while true do
-            CleanGame()
-            task.wait(Settings.AntiLag.ScanInterval)
-        end
-    end)
+    -- Monitor Thrown folder for direct cleaning
+    if workspace:FindFirstChild("Thrown") then
+        workspace.Thrown.ChildAdded:Connect(function(instance)
+            -- Espera um pouco para ter certeza que não é protegido
+            task.wait(0.1)
+            if instance and instance.Parent and not IsProtected(instance) then
+                instance:Destroy()
+            end
+        end)
+    end
     
     -- Create notification after everything is set up
     CreateNotification()
